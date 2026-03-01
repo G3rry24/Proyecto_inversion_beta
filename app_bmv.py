@@ -109,4 +109,28 @@ if not datos.empty and len(datos) > 50:
     
     if rsi_act < 40 and ultimo_p > ma50_act: señal, color = "COMPRA FUERTE 🚀", "green"
     elif rsi_act < 40: señal, color = "COMPRA ESPECULATIVA 🛒", "blue"
-    elif rsi_act > 65
+    elif rsi_act > 65: señal, color = "VENTA / TOMA PROVECHO ⚠️", "red"
+    else: señal, color = "MANTENER / NEUTRAL ⚖️", "gray"
+
+    # Corregido el error de escritura aquí:
+    st.markdown(f"""
+        <div style="background-color: rgba(0,0,0,0.05); padding: 15px; border-radius: 10px; border-left: 10px solid {color}; margin: 10px 0 20px 0;">
+            <h3 style="margin:0;">Señal de Estrategia: <span style="color:{color};">{señal}</span></h3>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Gráfico interactivo
+    fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.15, 0.65])
+    fig.add_trace(go.Candlestick(x=datos.index, open=datos['Open'], high=datos['High'], low=datos['Low'], close=datos['Close'], name='Precio'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=datos.index, y=datos['MA20'], line=dict(color='orange', width=2), name='MA20 (Naranja)'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=datos.index, y=datos['MA50'], line=dict(color='blue', width=2), name='MA50 (Azul)'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=datos.index, y=datos['Prediccion_IA'], line=dict(color='red', dash='dot'), name='IA Trend'), row=1, col=1)
+    fig.add_trace(go.Bar(x=datos.index, y=datos['Volume'], name='Volumen', marker_color='dodgerblue'), row=2, col=1)
+    fig.add_trace(go.Scatter(x=datos.index, y=datos['RSI'], line=dict(color='purple', width=2), name='RSI'), row=3, col=1)
+    fig.update_layout(height=850, xaxis_rangeslider_visible=False, template="plotly_white", margin=dict(t=30, b=10))
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Descarga
+    st.download_button("📥 Descargar Reporte CSV", datos.to_csv().encode('utf-8'), f"{ticker_sel}_full.csv", "text/csv")
+else:
+    st.error("Cargando datos (mínimo 50 días para promedios)...")
