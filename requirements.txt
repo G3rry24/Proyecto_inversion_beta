@@ -4,3 +4,4 @@ pandas
 mplfinance
 numpy
 scikit-learn
+plotly
