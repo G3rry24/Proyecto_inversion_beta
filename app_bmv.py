@@ -5,6 +5,7 @@ import mplfinance as mpf
 import numpy as np
 from sklearn.linear_model import LinearRegression
 import os
+from datetime import datetime  # <--- ESTA ES LA LÍNEA QUE FALTABA
 
 #-------------------------------------------------------------------------------
 # 1. CONFIGURACIÓN Y FUNCIONES DE APOYO
@@ -29,7 +30,7 @@ def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
             precision_msg = f"{100 - error:.1f}%"
 
     nueva_fila = pd.DataFrame([{
-        'Fecha': pd.Timestamp.now().strftime('%Y-%m-%d'),
+        'Fecha': datetime.now().strftime('%Y-%m-%d'),
         'Ticker': ticker,
         'Prediccion': pred_hoy,
         'Precio_Real': precio_actual
@@ -64,7 +65,6 @@ with st.expander("Estado actual del mercado", expanded=True):
                 if d_check.empty or len(d_check) < 15: continue
                 if isinstance(d_check.columns, pd.MultiIndex): d_check.columns = d_check.columns.get_level_values(0)
                 
-                # Cálculo RSI Express
                 delta = d_check['Close'].diff()
                 gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
                 loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
@@ -81,7 +81,6 @@ with st.expander("Estado actual del mercado", expanded=True):
             except:
                 cols[j].error(f"**{t}**\n\nError")
 
-# Mostrar la Ganadora del Día
 if datos_radar:
     ganadora = min(datos_radar, key=lambda x: x['rsi'])
     st.warning(f"🏆 **Oportunidad Top del Día:** {ganadora['ticker']} con un RSI de {ganadora['rsi']:.1f}. (La más descontada)")
@@ -95,7 +94,6 @@ datos = yf.download(ticker_sel, period=f"{meses}mo", interval="1d")
 if not datos.empty and len(datos) > 20:
     if isinstance(datos.columns, pd.MultiIndex): datos.columns = datos.columns.get_level_values(0)
 
-    # --- CÁLCULOS TÉCNICOS ---
     datos['MA20'] = datos['Close'].rolling(window=20).mean()
     std_dev = datos['Close'].rolling(window=20).std()
     datos['B_Sup'] = datos['MA20'] + (std_dev * 2)
@@ -106,7 +104,6 @@ if not datos.empty and len(datos) > 20:
     l_d = (-delta_d.where(delta_d < 0, 0)).rolling(window=14).mean()
     datos['RSI'] = 100 - (100 / (1 + (g_d / l_d)))
 
-    # IA Regresión Lineal
     X = np.arange(len(datos)).reshape(-1, 1)
     y = datos['Close'].values.flatten()
     modelo = LinearRegression().fit(X, y)
@@ -116,7 +113,6 @@ if not datos.empty and len(datos) > 20:
     ultimo_p = float(y[-1])
     precision = guardar_y_validar_prediccion(ticker_sel, pred_futura, ultimo_p)
 
-    # --- INTERFAZ ---
     st.subheader(f"Análisis Detallado: {ticker_sel}")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Precio Actual", f"${ultimo_p:.2f}")
@@ -124,7 +120,6 @@ if not datos.empty and len(datos) > 20:
     c3.metric("Precisión Histórica", precision)
     c4.metric("RSI Actual", f"{datos['RSI'].iloc[-1]:.1f}")
 
-    # --- BOTÓN DE DESCARGA ---
     csv = datos.to_csv().encode('utf-8')
     st.download_button(
         label="📥 Descargar Datos con Indicadores (CSV)",
@@ -133,11 +128,10 @@ if not datos.empty and len(datos) > 20:
         mime='text/csv',
     )
 
-    # Gráfico
     apds = [
         mpf.make_addplot(datos['B_Sup'], color='gray', linestyle='--', width=0.8),
         mpf.make_addplot(datos['B_Inf'], color='gray', linestyle='--', width=0.8),
-        mpf.make_addplot(datos['Prediccion_IA'], color='orange', width=1.0) # Línea de tendencia IA
+        mpf.make_addplot(datos['Prediccion_IA'], color='orange', width=1.0)
     ]
     mc = mpf.make_marketcolors(up='g', down='r', inherit=True)
     s = mpf.make_mpf_style(marketcolors=mc, gridstyle='--', y_on_right=True)
@@ -148,3 +142,5 @@ if not datos.empty and len(datos) > 20:
         fill_between=dict(y1=datos['B_Sup'].values, y2=datos['B_Inf'].values, alpha=0.1, color='gray')
     )
     st.pyplot(fig)
+else:
+    st.error("No hay suficientes datos.")
