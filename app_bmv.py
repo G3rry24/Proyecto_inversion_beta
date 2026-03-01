@@ -11,17 +11,13 @@ from datetime import datetime
 #-------------------------------------------------------------------------------
 # 1. CONFIGURACIÓN Y ESTILOS
 #-------------------------------------------------------------------------------
-st.set_page_config(page_title="Terminal Educativa Pro", layout="wide")
+st.set_page_config(page_title="Terminal Pro - Estrategia", layout="wide")
 
 st.markdown("""
     <style>
-    [data-testid="stSidebar"] button {
-        padding: 5px !important;
-        font-size: 12px !important;
-        border-radius: 8px !important;
-        border: 1px solid #f0f2f6 !important;
-    }
-    .main-header { font-size: 24px; font-weight: bold; color: #1E1E1E; }
+    [data-testid="stSidebar"] button { padding: 5px !important; font-size: 12px !important; border-radius: 8px !important; }
+    .stMetric { background-color: #ffffff; border: 1px solid #e6e9ef; padding: 15px; border-radius: 10px; }
+    .warning-box { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 10px; border-left: 5px solid #ffeeba; margin-bottom: 20px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -55,39 +51,20 @@ lista_acciones = ["BIMBOA.MX", "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX", "GENT
 if 'ticker_sel' not in st.session_state: st.session_state.ticker_sel = "BIMBOA.MX"
 if 'periodo_sel' not in st.session_state: st.session_state.periodo_sel = "6mo"
 
-st.sidebar.markdown('<p class="main-header">💎 Mi Watchlist</p>', unsafe_allow_html=True)
-
+st.sidebar.title("💎 Mi Watchlist")
 for i in range(0, len(lista_acciones), 2):
-    cols_side = st.sidebar.columns(2)
+    cols = st.sidebar.columns(2)
     for j in range(2):
         if i + j < len(lista_acciones):
             t = lista_acciones[i+j]
-            try:
-                mini = yf.download(t, period="2d", progress=False)
-                if not mini.empty:
-                    if isinstance(mini.columns, pd.MultiIndex): mini.columns = mini.columns.get_level_values(0)
-                    p_act = mini['Close'].iloc[-1]
-                    p_ant = mini['Close'].iloc[-2]
-                    emo = "🟢" if p_act >= p_ant else "🔴"
-                    label = f"{emo} {t.split('.')[0]}\n${p_act:,.2f}"
-                else: label = f"⚪ {t}"
-            except: label = f"❓ {t}"
-            if cols_side[j].button(label, key=f"btn_{t}", use_container_width=True):
+            if cols[j].button(t.split('.')[0], key=f"btn_{t}", use_container_width=True):
                 st.session_state.ticker_sel = t
 
 #-------------------------------------------------------------------------------
 # 3. CONTENIDO PRINCIPAL
 #-------------------------------------------------------------------------------
-st.title(f"Terminal: {st.session_state.ticker_sel}")
-
-st.markdown("### 🕒 Selecciona el Horizonte")
-c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
-btns = {"1S": "7d", "1M": "1mo", "3M": "3mo", "6M": "6mo", "9M": "9mo", "1A": "1y", "MAX": "max"}
-for i, (k, v) in enumerate(btns.items()):
-    if [c1, c2, c3, c4, c5, c6, c7][i].button(k, use_container_width=True):
-        st.session_state.periodo_sel = v
-
-datos = yf.download(st.session_state.ticker_sel, period=st.session_state.periodo_sel, interval="1d")
+ticker = st.session_state.ticker_sel
+datos = yf.download(ticker, period=st.session_state.periodo_sel, interval="1d")
 
 if not datos.empty and len(datos) > 1:
     if isinstance(datos.columns, pd.MultiIndex): datos.columns = datos.columns.get_level_values(0)
@@ -99,60 +76,61 @@ if not datos.empty and len(datos) > 1:
     g = (delta.where(delta > 0, 0)).rolling(14).mean()
     l = (-delta.where(delta < 0, 0)).rolling(14).mean()
     datos['RSI'] = 100 - (100 / (1 + (g / l)))
+    colores_vol = ['#26a69a' if c >= o else '#ef5350' for c, o in zip(datos['Close'], datos['Open'])]
     
-    # Lógica de colores para el volumen
-    # Si el cierre de hoy es mayor al de ayer -> Verde, de lo contrario -> Rojo
-    colores_volumen = ['#26a69a' if row['Close'] >= row['Open'] else '#ef5350' for index, row in datos.iterrows()]
-    
+    # IA
     X = np.arange(len(datos)).reshape(-1, 1)
     y = datos['Close'].values.flatten()
     mod = LinearRegression().fit(X, y)
     pred = mod.predict([[len(datos)]])[0]
-    
     u_p, p_ay = float(y[-1]), float(y[-2])
-    var = ((u_p - p_ay) / p_ay) * 100
-    prec = guardar_y_validar_prediccion(st.session_state.ticker_sel, pred, u_p)
+    prec = guardar_y_validar_prediccion(ticker, pred, u_p)
 
-    tab1, tab2 = st.tabs(["📊 Gráficas y Señales", "📖 Guía para Principiantes"])
+    tab1, tab2 = st.tabs(["📊 Gráficas", "🛡️ Filtro de Riesgo y Ayuda"])
 
     with tab1:
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("Precio", f"${u_p:,.2f}", f"{var:.2f}%")
-        m2.metric("Cierre Ayer", f"${p_ay:,.2f}")
-        m3.metric("IA Mañana", f"${pred:,.2f}", f"{pred-u_p:,.2f}")
-        m4.metric("Precisión IA", prec)
-        m5.metric("RSI", f"{datos['RSI'].iloc[-1]:.1f}")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Precio", f"${u_p:,.2f}")
+        c2.metric("IA Mañana", f"${pred:,.2f}", f"{pred-u_p:.2f}")
+        c3.metric("Precisión IA", prec)
+        c4.metric("RSI Actual", f"{datos['RSI'].iloc[-1]:.1f}")
 
-        # Gráfico
-        fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.15, 0.65])
-        
-        # Panel 1: Velas
-        fig.add_trace(go.Candlestick(x=datos.index, open=datos['Open'], high=datos['High'], low=datos['Low'], close=datos['Close'], name='Precio'), row=1, col=1)
+        fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.6, 0.15, 0.25])
+        fig.add_trace(go.Candlestick(x=datos.index, open=datos['Open'], high=datos['High'], low=datos['Low'], close=datos['Close'], name='Velas'), row=1, col=1)
         fig.add_trace(go.Scatter(x=datos.index, y=datos['MA20'], line=dict(color='orange', width=2), name='MA20'), row=1, col=1)
         fig.add_trace(go.Scatter(x=datos.index, y=datos['MA50'], line=dict(color='blue', width=2), name='MA50'), row=1, col=1)
-        
-        # Panel 2: VOLUMEN CON COLORES DINÁMICOS
-        fig.add_trace(go.Bar(x=datos.index, y=datos['Volume'], name='Volumen', marker_color=colores_volumen, opacity=0.8), row=2, col=1)
-        
-        # Panel 3: RSI
-        fig.add_trace(go.Scatter(x=datos.index, y=datos['RSI'], line=dict(color='purple', width=2), name='RSI'), row=3, col=1)
+        fig.add_trace(go.Bar(x=datos.index, y=datos['Volume'], marker_color=colores_vol, name='Volumen'), row=2, col=1)
+        fig.add_trace(go.Scatter(x=datos.index, y=datos['RSI'], line=dict(color='purple'), name='RSI'), row=3, col=1)
         fig.update_layout(height=800, xaxis_rangeslider_visible=False, template="plotly_white")
         st.plotly_chart(fig, use_container_width=True)
 
     with tab2:
-        st.markdown("## 🎓 Guía: ¿Qué significa el color del Volumen?")
-        col_v1, col_v2 = st.columns(2)
-        with col_v1:
-            st.success("### 💹 Barra Verde (Volumen Alcista)")
-            st.write("""
-            Indica que el precio **cerró por encima de su apertura**. 
-            * **Interpretación:** Hubo una fuerte presión de compra que logró empujar el precio hacia arriba. 
-            * **Dato Pro:** Si la barra verde es muy alta, significa que los "toros" (compradores) tienen el control total.
-            """)
-        with col_v2:
-            st.error("### 📉 Barra Roja (Volumen Bajista)")
-            st.write("""
-            Indica que el precio **cerró por debajo de su apertura**.
-            * **Interpretación:** La presión de venta superó a la de compra durante el día.
-            * **Dato Pro:** Una barra roja gigante suele indicar que los inversionistas grandes están saliendo del activo (pánico o toma de ganancias).
-            """)
+        st.header("🛡️ ¿Cuándo NO comprar? (Filtro de Seguridad)")
+        st.markdown("""
+        Antes de ejecutar una orden, revisa estos 3 semáforos de peligro:
+        """)
+        
+        c_r1, c_r2, c_r3 = st.columns(3)
+        with c_r1:
+            st.error("### 🛑 RSI > 70")
+            st.write("**Peligro:** El activo está en 'Sobrecompra'. Significa que todos ya compraron y no queda nadie para empujar el precio más arriba. Es probable que venga una caída.")
+        with c_r2:
+            st.error("### 🛑 Precio bajo MA50")
+            st.write("**Peligro:** Si el precio está por debajo de la línea azul, la tendencia es bajista. No intentes 'adivinar' el suelo; espera a que cruce hacia arriba.")
+        with c_r3:
+            st.error("### 🛑 IA con < 85% Precisión")
+            st.write("**Peligro:** Si la precisión de la IA es baja, significa que el mercado está muy volátil o caótico. No confíes en la predicción de precio en estos días.")
+
+        
+
+        st.divider()
+        st.subheader("🎓 Recordatorio de Indicadores")
+        col_ayuda1, col_ayuda2 = st.columns(2)
+        with col_ayuda1:
+            st.info("**Velas y Volumen:** Color Verde = Compradores ganan. Color Rojo = Vendedores ganan.")
+            st.info("**MA20 (Naranja):** Soporte de corto plazo. Si el precio la toca y sube, es buena señal.")
+        with col_ayuda2:
+            st.info("**RSI:** Tu termómetro de euforia. 30 = Oportunidad, 70 = Cuidado.")
+            st.info("**IA:** Tu brújula de inercia. Te dice hacia dónde apunta el 'vuelo' de la acción.")
+
+    st.download_button("📥 Descargar Reporte CSV", datos.to_csv().encode('utf-8'), f"analisis_{ticker}.csv")
