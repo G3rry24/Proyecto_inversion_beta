@@ -9,15 +9,15 @@ import os
 from datetime import datetime
 
 #-------------------------------------------------------------------------------
-# 1. CONFIGURACIÓN Y ESTILOS
+# 1. CONFIGURACIÓN Y ESTILOS (FIX DEL ERROR TYPEERROR)
 #-------------------------------------------------------------------------------
-st.set_page_config(page_title="Terminal Pro - Estrategia", layout="wide")
+st.set_page_config(page_title="Terminal Pro Educativa", layout="wide")
 
 st.markdown("""
     <style>
     [data-testid="stSidebar"] button { padding: 5px !important; font-size: 12px !important; border-radius: 8px !important; }
     .stMetric { background-color: #ffffff; border: 1px solid #e6e9ef; padding: 15px; border-radius: 10px; }
-    .warning-box { background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 10px; border-left: 5px solid #ffeeba; margin-bottom: 20px; }
+    .status-ball { height: 10px; width: 10px; border-radius: 50%; display: inline-block; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -42,7 +42,7 @@ def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
     return precision_msg
 
 #-------------------------------------------------------------------------------
-# 2. WATCHLIST (IZQUIERDA)
+# 2. WATCHLIST CON INDICADORES (IZQUIERDA)
 #-------------------------------------------------------------------------------
 lista_acciones = ["BIMBOA.MX", "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX", "GENTERA.MX", 
                   "CEMEXCPO.MX", "FMTY14.MX", "FEMSAUBD.MX", "GMEXICOB.MX", "BTC-USD", 
@@ -51,19 +51,40 @@ lista_acciones = ["BIMBOA.MX", "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX", "GENT
 if 'ticker_sel' not in st.session_state: st.session_state.ticker_sel = "BIMBOA.MX"
 if 'periodo_sel' not in st.session_state: st.session_state.periodo_sel = "6mo"
 
-st.sidebar.title("💎 Mi Watchlist")
+st.sidebar.title("💎 Watchlist")
 for i in range(0, len(lista_acciones), 2):
     cols = st.sidebar.columns(2)
     for j in range(2):
         if i + j < len(lista_acciones):
             t = lista_acciones[i+j]
-            if cols[j].button(t.split('.')[0], key=f"btn_{t}", use_container_width=True):
+            try:
+                # Mini descarga para el indicador de color
+                mini = yf.download(t, period="2d", progress=False)
+                if not mini.empty:
+                    if isinstance(mini.columns, pd.MultiIndex): mini.columns = mini.columns.get_level_values(0)
+                    p_act = mini['Close'].iloc[-1]
+                    p_ant = mini['Close'].iloc[-2]
+                    color = "🟢" if p_act >= p_ant else "🔴"
+                    label = f"{color} {t.split('.')[0]}\n${p_act:,.2f}"
+                else: label = f"⚪ {t.split('.')[0]}"
+            except: label = f"❓ {t.split('.')[0]}"
+            
+            if cols[j].button(label, key=f"btn_{t}", use_container_width=True):
                 st.session_state.ticker_sel = t
 
 #-------------------------------------------------------------------------------
-# 3. CONTENIDO PRINCIPAL
+# 3. PROCESAMIENTO Y GRÁFICAS
 #-------------------------------------------------------------------------------
 ticker = st.session_state.ticker_sel
+
+# Selectores de tiempo arriba
+st.markdown("### 🕒 Rango de Tiempo")
+c_t1, c_t2, c_t3, c_t4, c_t5, c_t6, c_t7 = st.columns(7)
+btns = {"1S": "7d", "1M": "1mo", "3M": "3mo", "6M": "6mo", "9M": "9mo", "1A": "1y", "MAX": "max"}
+for i, (k, v) in enumerate(btns.items()):
+    if [c_t1, c_t2, c_t3, c_t4, c_t5, c_t6, c_t7][i].button(k, use_container_width=True):
+        st.session_state.periodo_sel = v
+
 datos = yf.download(ticker, period=st.session_state.periodo_sel, interval="1d")
 
 if not datos.empty and len(datos) > 1:
@@ -86,51 +107,66 @@ if not datos.empty and len(datos) > 1:
     u_p, p_ay = float(y[-1]), float(y[-2])
     prec = guardar_y_validar_prediccion(ticker, pred, u_p)
 
-    tab1, tab2 = st.tabs(["📊 Gráficas", "🛡️ Filtro de Riesgo y Ayuda"])
+    # --- PESTAÑAS ---
+    tab1, tab2 = st.tabs(["📊 Gráficas y Señales", "📖 Guía de Indicadores y Riesgo"])
 
     with tab1:
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Precio", f"${u_p:,.2f}")
-        c2.metric("IA Mañana", f"${pred:,.2f}", f"{pred-u_p:.2f}")
-        c3.metric("Precisión IA", prec)
-        c4.metric("RSI Actual", f"{datos['RSI'].iloc[-1]:.1f}")
+        st.subheader(f"Análisis Técnico: {ticker}")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Precio", f"${u_p:,.2f}", f"{((u_p-p_ay)/p_ay)*100:.2f}%")
+        m2.metric("IA Mañana", f"${pred:,.2f}", f"{pred-u_p:.2f}")
+        m3.metric("Precisión IA", prec)
+        m4.metric("RSI Actual", f"{datos['RSI'].iloc[-1]:.1f}")
 
         fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.6, 0.15, 0.25])
         fig.add_trace(go.Candlestick(x=datos.index, open=datos['Open'], high=datos['High'], low=datos['Low'], close=datos['Close'], name='Velas'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=datos.index, y=datos['MA20'], line=dict(color='orange', width=2), name='MA20'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=datos.index, y=datos['MA50'], line=dict(color='blue', width=2), name='MA50'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=datos.index, y=datos['MA20'], line=dict(color='orange', width=2), name='MA20 (Naranja)'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=datos.index, y=datos['MA50'], line=dict(color='blue', width=2), name='MA50 (Azul)'), row=1, col=1)
         fig.add_trace(go.Bar(x=datos.index, y=datos['Volume'], marker_color=colores_vol, name='Volumen'), row=2, col=1)
         fig.add_trace(go.Scatter(x=datos.index, y=datos['RSI'], line=dict(color='purple'), name='RSI'), row=3, col=1)
-        fig.update_layout(height=800, xaxis_rangeslider_visible=False, template="plotly_white")
+        fig.update_layout(height=800, xaxis_rangeslider_visible=False, template="plotly_white", margin=dict(l=0, r=0, t=0, b=0))
         st.plotly_chart(fig, use_container_width=True)
 
     with tab2:
-        st.header("🛡️ ¿Cuándo NO comprar? (Filtro de Seguridad)")
-        st.markdown("""
-        Antes de ejecutar una orden, revisa estos 3 semáforos de peligro:
-        """)
+        st.header("📖 Guía de Interpretación")
         
-        c_r1, c_r2, c_r3 = st.columns(3)
-        with c_r1:
-            st.error("### 🛑 RSI > 70")
-            st.write("**Peligro:** El activo está en 'Sobrecompra'. Significa que todos ya compraron y no queda nadie para empujar el precio más arriba. Es probable que venga una caída.")
-        with c_r2:
-            st.error("### 🛑 Precio bajo MA50")
-            st.write("**Peligro:** Si el precio está por debajo de la línea azul, la tendencia es bajista. No intentes 'adivinar' el suelo; espera a que cruce hacia arriba.")
-        with c_r3:
-            st.error("### 🛑 IA con < 85% Precisión")
-            st.write("**Peligro:** Si la precisión de la IA es baja, significa que el mercado está muy volátil o caótico. No confíes en la predicción de precio en estos días.")
+        # EXPLICACIÓN DE LÍNEAS
+        st.subheader("1. Líneas del Gráfico (Medias Móviles)")
+        col_g1, col_g2 = st.columns(2)
+        with col_g1:
+            st.markdown("""
+            **Línea Naranja (MA20):** * Es el promedio del precio de los últimos 20 días. 
+            * **Uso:** Si el precio está arriba, la acción tiene 'fuerza' a corto plazo.
+            """)
+        with col_g2:
+            st.markdown("""
+            **Línea Azul (MA50):** * Es el promedio de los últimos 50 días. 
+            * **Uso:** Es la tendencia principal. Si el precio cae por debajo, la tendencia es bajista (Malo).
+            """)
+        
+        st.divider()
 
-        
+        # EXPLICACIÓN DE VELAS Y VOLUMEN
+        st.subheader("2. Velas y Volumen de Color")
+                col_v1, col_v2 = st.columns(2)
+        with col_v1:
+            st.success("**Verde:** El precio subió. El volumen verde indica que los compradores ganaron la batalla hoy.")
+        with col_v2:
+            st.error("**Rojo:** El precio bajó. El volumen rojo indica que hubo presión de venta o pánico.")
 
         st.divider()
-        st.subheader("🎓 Recordatorio de Indicadores")
-        col_ayuda1, col_ayuda2 = st.columns(2)
-        with col_ayuda1:
-            st.info("**Velas y Volumen:** Color Verde = Compradores ganan. Color Rojo = Vendedores ganan.")
-            st.info("**MA20 (Naranja):** Soporte de corto plazo. Si el precio la toca y sube, es buena señal.")
-        with col_ayuda2:
-            st.info("**RSI:** Tu termómetro de euforia. 30 = Oportunidad, 70 = Cuidado.")
-            st.info("**IA:** Tu brújula de inercia. Te dice hacia dónde apunta el 'vuelo' de la acción.")
 
-    st.download_button("📥 Descargar Reporte CSV", datos.to_csv().encode('utf-8'), f"analisis_{ticker}.csv")
+        # FILTROS DE RIESGO
+        st.subheader("🛡️ Filtros de Seguridad (¿Cuándo NO comprar?)")
+        fr1, fr2, fr3 = st.columns(3)
+        with fr1:
+            st.warning("### RSI > 70")
+            st.write("Está muy caro. Espera a que baje para no comprar en la cima.")
+        with fr2:
+            st.warning("### Precio < MA50")
+            st.write("La tendencia es bajista. No intentes atrapar un cuchillo cayendo.")
+        with fr3:
+            st.warning("### Precisión < 85%")
+            st.write("La IA no está segura. Mejor confía en tu propio análisis técnico.")
+
+    st.download_button("📥 Descargar CSV", datos.to_csv().encode('utf-8'), f"analisis_{ticker}.csv")
