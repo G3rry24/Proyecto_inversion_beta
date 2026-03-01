@@ -9,28 +9,22 @@ import os
 from datetime import datetime
 
 #-------------------------------------------------------------------------------
-# 1. CONFIGURACIÓN Y ESTILOS CSS
+# 1. CONFIGURACIÓN, ESTILOS Y CORRECCIÓN DE ERRORES
 #-------------------------------------------------------------------------------
-st.set_page_config(page_title="Terminal Pro Ultra", layout="wide")
+st.set_page_config(page_title="Terminal Educativa Pro", layout="wide")
 
+# Estilos para que la Watchlist se vea impecable
 st.markdown("""
     <style>
-    /* Compactar botones de la sidebar */
     [data-testid="stSidebar"] button {
-        padding: 2px 5px !important;
-        font-size: 11px !important;
-        line-height: 1.1 !important;
-        border-radius: 4px !important;
-        margin-bottom: 2px !important;
+        padding: 5px !important;
+        font-size: 12px !important;
+        border-radius: 8px !important;
+        border: 1px solid #f0f2f6 !important;
     }
-    /* Estilo para la señal de estrategia */
-    .signal-box {
-        border-left: 5px solid;
-        padding: 10px 15px;
-        margin: 10px 0px 20px 0px;
-        background-color: rgba(0,0,0,0.03);
-        border-radius: 0 5px 5px 0;
-    }
+    .main-header { font-size: 24px; font-weight: bold; color: #1E1E1E; }
+    .stTabs [data-baseweb="tab-list"] { gap: 20px; }
+    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -55,7 +49,7 @@ def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
     return precision_msg
 
 #-------------------------------------------------------------------------------
-# 2. SIDEBAR: WATCHLIST ULTRA-COMPACTA
+# 2. WATCHLIST (IZQUIERDA)
 #-------------------------------------------------------------------------------
 lista_acciones = ["BIMBOA.MX", "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX", "GENTERA.MX", 
                   "CEMEXCPO.MX", "FMTY14.MX", "FEMSAUBD.MX", "GMEXICOB.MX", "BTC-USD", 
@@ -64,131 +58,128 @@ lista_acciones = ["BIMBOA.MX", "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX", "GENT
 if 'ticker_sel' not in st.session_state: st.session_state.ticker_sel = "BIMBOA.MX"
 if 'periodo_sel' not in st.session_state: st.session_state.periodo_sel = "6mo"
 
-st.sidebar.title("💎 Watchlist")
-st.sidebar.markdown("---")
+st.sidebar.markdown('<p class="main-header">💎 Mi Watchlist</p>', unsafe_allow_html=True)
 
 for i in range(0, len(lista_acciones), 2):
     cols_side = st.sidebar.columns(2)
     for j in range(2):
         if i + j < len(lista_acciones):
-            accion = lista_acciones[i+j]
+            t = lista_acciones[i+j]
             try:
-                mini = yf.download(accion, period="2d", progress=False)
+                mini = yf.download(t, period="2d", progress=False)
                 if not mini.empty:
                     if isinstance(mini.columns, pd.MultiIndex): mini.columns = mini.columns.get_level_values(0)
                     p_act = mini['Close'].iloc[-1]
                     p_ant = mini['Close'].iloc[-2]
-                    color_f = "🟢" if p_act >= p_ant else "🔴"
-                    label = f"{color_f} {accion.split('.')[0]}\n${p_act:,.2f}"
-                else: label = f"⚪ {accion}"
-            except: label = f"❓ {accion}"
-            
-            if cols_side[j].button(label, key=f"btn_{accion}", use_container_width=True):
-                st.session_state.ticker_sel = accion
+                    emo = "🟢" if p_act >= p_ant else "🔴"
+                    label = f"{emo} {t.split('.')[0]}\n${p_act:,.2f}"
+                else: label = f"⚪ {t}"
+            except: label = f"❓ {t}"
+            if cols_side[j].button(label, key=f"btn_{t}", use_container_width=True):
+                st.session_state.ticker_sel = t
 
 #-------------------------------------------------------------------------------
-# 3. CUERPO PRINCIPAL
+# 3. CONTENIDO PRINCIPAL
 #-------------------------------------------------------------------------------
-ticker_sel = st.session_state.ticker_sel
+st.title(f"Terminal: {st.session_state.ticker_sel}")
 
-# BARRA DE PERIODOS SUPERIOR
-st.markdown("### 🕒 Rango de Tiempo")
-cols_p = st.columns(7)
-opciones = {"1S": "7d", "1M": "1mo", "3M": "3mo", "6M": "6mo", "9M": "9mo", "1A": "1y", "MAX": "max"}
-for idx, (label, value) in enumerate(opciones.items()):
-    if cols_p[idx].button(label, use_container_width=True):
-        st.session_state.periodo_sel = value
+# Botones de Tiempo Superiores
+st.markdown("### 🕒 Selecciona el Horizonte")
+c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
+btns = {"1S": "7d", "1M": "1mo", "3M": "3mo", "6M": "6mo", "9M": "9mo", "1A": "1y", "MAX": "max"}
+for i, (k, v) in enumerate(btns.items()):
+    if [c1, c2, c3, c4, c5, c6, c7][i].button(k, use_container_width=True):
+        st.session_state.periodo_sel = v
 
-st.markdown("---")
-
-# DESCARGA DE DATOS
-datos = yf.download(ticker_sel, period=st.session_state.periodo_sel, interval="1d")
+datos = yf.download(st.session_state.ticker_sel, period=st.session_state.periodo_sel, interval="1d")
 
 if not datos.empty and len(datos) > 1:
     if isinstance(datos.columns, pd.MultiIndex): datos.columns = datos.columns.get_level_values(0)
-
-    # CÁLCULOS TÉCNICOS
+    
+    # Análisis
     datos['MA20'] = datos['Close'].rolling(20).mean()
     datos['MA50'] = datos['Close'].rolling(50).mean()
     delta = datos['Close'].diff()
-    g = delta.where(delta > 0, 0).rolling(14).mean()
-    l = -delta.where(delta < 0, 0).rolling(14).mean()
+    g = (delta.where(delta > 0, 0)).rolling(14).mean()
+    l = (-delta.where(delta < 0, 0)).rolling(14).mean()
     datos['RSI'] = 100 - (100 / (1 + (g / l)))
     
     X = np.arange(len(datos)).reshape(-1, 1)
     y = datos['Close'].values.flatten()
-    modelo = LinearRegression().fit(X, y)
-    pred_futura = modelo.predict([[len(datos)]])[0]
+    mod = LinearRegression().fit(X, y)
+    pred = mod.predict([[len(datos)]])[0]
     
-    u_p = float(y[-1])
-    p_ayer = float(y[-2])
-    var_pct = ((u_p - p_ayer) / p_ayer) * 100
-    precision = guardar_y_validar_prediccion(ticker_sel, pred_futura, u_p)
+    u_p, p_ay = float(y[-1]), float(y[-2])
+    var = ((u_p - p_ay) / p_ay) * 100
+    prec = guardar_y_validar_prediccion(st.session_state.ticker_sel, pred, u_p)
 
-    # CREACIÓN DE PESTAÑAS (TABS)
-    tab_grafica, tab_ayuda = st.tabs(["📊 Análisis Técnico", "📚 Guía de Indicadores"])
+    # --- PESTAÑAS ---
+    tab1, tab2 = st.tabs(["📊 Gráficas y Señales", "📖 Guía para Principiantes"])
 
-    with tab_grafica:
-        st.subheader(f"📈 {ticker_sel} - Dashboard")
-        
-        # MÉTRICAS
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("Precio Actual", f"${u_p:,.2f}", f"{var_pct:.2f}%")
-        m2.metric("Cierre Ayer", f"${p_ayer:,.2f}")
-        m3.metric("IA Mañana", f"${pred_futura:,.2f}", f"{pred_futura - u_p:,.2f}")
-        m4.metric("Precisión IA", precision)
-        m5.metric("RSI Actual", f"{datos['RSI'].iloc[-1]:.1f}")
+    with tab1:
+        # Métricas
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Precio", f"${u_p:,.2f}", f"{var:.2f}%")
+        col2.metric("Cierre Ayer", f"${p_ay:,.2f}")
+        col3.metric("IA Mañana", f"${pred:,.2f}", f"{pred-u_p:,.2f}")
+        col4.metric("Precisión IA", prec)
+        col5.metric("RSI", f"{datos['RSI'].iloc[-1]:.1f}")
 
-        # SEÑAL
-        rsi_act = datos['RSI'].iloc[-1]
-        ma50_act = datos['MA50'].iloc[-1] if not np.isnan(datos['MA50'].iloc[-1]) else 0
-        if rsi_act < 35 and u_p > ma50_act: s, c = "COMPRA FUERTE 🚀", "#2ecc71"
-        elif rsi_act < 35: s, c = "COMPRA RIESGO 🛒", "#3498db"
-        elif rsi_act > 65: s, c = "VENTA / SOBRECOMPRA ⚠️", "#e74c3c"
-        else: s, c = "NEUTRAL / MANTENER ⚖️", "#95a5a6"
+        # Señal
+        rsi_a = datos['RSI'].iloc[-1]
+        ma50_a = datos['MA50'].iloc[-1]
+        if rsi_a < 35 and u_p > ma50_a: s, color = "COMPRA FUERTE 🚀", "#2ecc71"
+        elif rsi_a < 35: s, color = "COMPRA RIESGO 🛒", "#3498db"
+        elif rsi_a > 65: s, color = "VENTA ⚠️", "#e74c3c"
+        else: s, color = "MANTENER ⚖️", "#95a5a6"
 
-        st.markdown(f'<div class="signal-box" style="border-left-color: {c};"><b>Estrategia Sugerida:</b> <span style="color:{c}; font-weight:bold;">{s}</span></div>', unsafe_allow_html=True)
+        st.markdown(f"""<div style="border-left: 8px solid {color}; padding: 15px; background: #f9f9f9; border-radius: 5px;">
+            <h3 style="margin:0; color:{color};">{s}</h3></div><br>""", unsafe_allow_html=True)
 
-        # GRÁFICA
+        # Gráfico
         fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.15, 0.65])
         fig.add_trace(go.Candlestick(x=datos.index, open=datos['Open'], high=datos['High'], low=datos['Low'], close=datos['Close'], name='Precio'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=datos.index, y=datos['MA20'], line=dict(color='orange', width=1.5), name='MA20'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=datos.index, y=datos['MA50'], line=dict(color='blue', width=1.5), name='MA50'), row=1, col=1)
-        fig.add_trace(go.Bar(x=datos.index, y=datos['Volume'], name='Volumen', marker_color='rgba(100, 149, 237, 0.4)'), row=2, col=1)
-        fig.add_trace(go.Scatter(x=datos.index, y=datos['RSI'], line=dict(color='purple', width=1.5), name='RSI'), row=3, col=1)
-        fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
-        fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
-        fig.update_layout(height=800, xaxis_rangeslider_visible=False, template="plotly_white", margin=dict(t=10, b=10))
+        fig.add_trace(go.Scatter(x=datos.index, y=datos['MA20'], line=dict(color='orange', width=2), name='MA20 (Corto Plazo)'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=datos.index, y=datos['MA50'], line=dict(color='blue', width=2), name='MA50 (Tendencia)'), row=1, col=1)
+        fig.add_trace(go.Bar(x=datos.index, y=datos['Volume'], name='Volumen', marker_color='#D3D3D3'), row=2, col=1)
+        fig.add_trace(go.Scatter(x=datos.index, y=datos['RSI'], line=dict(color='purple', width=2), name='RSI'), row=3, col=1)
+        fig.update_layout(height=700, xaxis_rangeslider_visible=False, template="plotly_white")
         st.plotly_chart(fig, use_container_width=True)
 
-    with tab_ayuda:
-        st.markdown("""
-        ## 📘 Manual del Inversionista
-        Este panel explica la lógica detrás de cada indicador de tu terminal.
+    with tab2:
+        st.markdown("## 🎓 Diccionario Visual para el Inversionista")
         
-        ### 🤖 IA (Inteligencia Artificial)
-        * **Qué es:** Utiliza **Regresión Lineal** para proyectar el precio del día siguiente basándose en la tendencia actual.
-        * **Uso:** No debe usarse sola, sino como una meta de precio posible si la tendencia se mantiene.
+        c_a, c_b = st.columns(2)
         
-        ### 📊 Medias Móviles (MA)
-        * **MA20 (Naranja):** Tendencia de corto plazo (20 días).
-        * **MA50 (Azul):** Tendencia de mediano plazo (50 días).
-        * **Interpretación:** Si el precio está sobre ambas líneas, la acción está en una **fase alcista saludable**.
-        
-        ### 🟣 RSI (Relative Strength Index)
-        
+        with c_a:
+            st.info("### 1. ¿Cómo leo el precio?")
+            st.write("""
+            * **Velas Verdes:** El precio subió hoy.
+            * **Velas Rojas:** El precio bajó hoy.
+            * **Volumen (Barras Grises):** Indica cuántas personas están comprando/vendiendo. Si las barras son altas, hay mucho interés en la acción.
+            """)
+            
+            st.success("### 2. Las Líneas Mágicas (Medias Móviles)")
+            st.write("""
+            Imagina que estas líneas son el 'clima' de la acción:
+            * **Línea Naranja (MA20):** Es el clima de las últimas semanas. Si el precio está arriba, hay sol.
+            * **Línea Azul (MA50):** Es el clima de los últimos meses. Si el precio cruza hacia arriba esta línea, la acción está entrando en una 'buena temporada'.
+            """)
 
-[Image of a relative strength index chart]
+        with c_b:
+            st.warning("### 3. El Termómetro: RSI")
+            st.write("""
+            El RSI nos dice si la gente está eufórica o asustada:
+            * **Arriba de 70:** ¡Euforia! Todos compraron y ya está muy caro. (Peligro de caída).
+            * **Abajo de 30:** ¡Miedo! Todos vendieron y está en 'oferta'. (Oportunidad de compra).
+            """)
+            
+            st.error("### 4. La IA (Predicción)")
+            st.write("""
+            Nuestra IA no lee el futuro, pero dibuja una línea recta basada en los últimos días.
+            * **Si la IA dice 100 y el precio es 90:** Significa que, si nada cambia, la acción tiene espacio para subir.
+            * **Precisión:** Te dice qué tan bien le atinó la IA el día anterior. ¡Busca porcentajes arriba del 90%!
+            """)
 
-        * **Nivel 70 (Rojo):** El precio ha subido muy rápido. Riesgo de caída inminente.
-        * **Nivel 30 (Verde):** El precio ha caído demasiado. Probabilidad de rebote alcista.
-        
-        ### 🚦 Lógica de Señales
-        * **🚀 Compra Fuerte:** Ocurre cuando el RSI dice que está "barato" y el precio ya está recuperando terreno sobre la Media de 50.
-        """)
-
-    # BOTÓN DE DESCARGA (Fuera de las pestañas para estar siempre visible)
-    st.download_button("📥 Descargar Datos CSV", datos.to_csv().encode('utf-8'), f"analisis_{ticker_sel}.csv", "text/csv")
-
-else:
-    st.error("No hay datos suficientes para este activo.")
+    # Descarga
+    st.download_button("📥 Exportar Datos para Excel", datos.to_csv().encode('utf-8'), "datos_inversion.csv", "text/csv")
