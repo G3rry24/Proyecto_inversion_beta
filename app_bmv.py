@@ -18,11 +18,9 @@ st.markdown("""
     [data-testid="stSidebar"] button { padding: 5px !important; font-size: 11px !important; border-radius: 8px !important; }
     .stMetric { background-color: #ffffff; border: 1px solid #eeeeee; padding: 15px; border-radius: 10px; }
     .signal-card { padding: 20px; border-radius: 10px; text-align: center; color: white; font-weight: bold; margin-bottom: 20px; }
-    .guia-box { background-color: #f8f9fa; padding: 15px; border-radius: 10px; border-left: 5px solid #3498db; margin-bottom: 15px; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- Funciones de Utilidad ---
 def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
     archivo = "historial_predicciones.csv"
     if os.path.exists(archivo):
@@ -84,7 +82,7 @@ datos = yf.download(ticker, period="6mo", interval="1d")
 if not datos.empty and len(datos) > 1:
     if isinstance(datos.columns, pd.MultiIndex): datos.columns = datos.columns.get_level_values(0)
     
-    # Indicadores
+    # Cálculos
     datos['MA20'] = datos['Close'].rolling(20).mean()
     datos['MA50'] = datos['Close'].rolling(50).mean()
     delta = datos['Close'].diff()
@@ -100,26 +98,28 @@ if not datos.empty and len(datos) > 1:
     pred = mod.predict([[len(datos)]])[0]
     u_p, p_ay = float(y[-1]), float(y[-2])
     rsi_actual = datos['RSI'].iloc[-1]
+    ma50_actual = datos['MA50'].iloc[-1]
     prec = guardar_y_validar_prediccion(ticker, pred, u_p)
 
-    # Lógica de Señal
-    if rsi_actual < 35:
-        estatus, color_s, desc_s = "COMPRA (Oferta) 🔥", "#2ecc71", "El RSI indica que la acción está muy barata."
-    elif rsi_actual > 65:
-        estatus, color_s, desc_s = "VENTA (Caro) 🚩", "#e74c3c", "El RSI indica euforia; riesgo de caída pronto."
+    # Lógica de Señal Estratégica
+    if rsi_actual < 35 and u_p > ma50_actual:
+        estatus, color_s, desc_s = "COMPRA FUERTE 🚀", "#2ecc71", "Precio de oferta en tendencia alcista sana."
+    elif rsi_actual < 35:
+        estatus, color_s, desc_s = "COMPRA (Oferta) 🔥", "#f1c40f", "La acción está barata, pero la tendencia es débil."
+    elif rsi_actual > 70:
+        estatus, color_s, desc_s = "VENTA (Caro) 🚩", "#e74c3c", "Riesgo de caída por exceso de optimismo."
     else:
-        estatus, color_s, desc_s = "MANTENER 👀", "#3498db", "Precio en zona neutral, sin movimientos bruscos."
+        estatus, color_s, desc_s = "MANTENER 👀", "#3498db", "Sin señales claras, precio en zona neutral."
 
-    # --- PESTAÑAS ---
-    tab1, tab2 = st.tabs(["📊 Panel de Control", "📖 Guía Maestra Recuperada"])
+    tab1, tab2 = st.tabs(["📊 Panel de Control", "📖 Guía Maestra"])
 
     with tab1:
         st.markdown(f'<div class="signal-card" style="background-color:{color_s};"><h2>{estatus}</h2><p>{desc_s}</p></div>', unsafe_allow_html=True)
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Precio", f"${u_p:,.2f}", f"{((u_p-p_ay)/p_ay)*100:.2f}%")
+        m1.metric("Precio Actual", f"${u_p:,.2f}", f"{((u_p-p_ay)/p_ay)*100:.2f}%")
         m2.metric("IA Mañana", f"${pred:,.2f}", f"{pred-u_p:.2f}")
         m3.metric("Confianza IA", prec)
-        m4.metric("RSI", f"{rsi_actual:.1f}")
+        m4.metric("RSI (Fuerza)", f"{rsi_actual:.1f}")
 
         fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.6, 0.15, 0.25])
         fig.add_trace(go.Candlestick(x=datos.index, open=datos['Open'], high=datos['High'], low=datos['Low'], close=datos['Close'], name='Velas'), row=1, col=1)
@@ -127,42 +127,39 @@ if not datos.empty and len(datos) > 1:
         fig.add_trace(go.Scatter(x=datos.index, y=datos['MA50'], line=dict(color='blue', width=2), name='MA50 (Azul)'), row=1, col=1)
         fig.add_trace(go.Bar(x=datos.index, y=datos['Volume'], marker_color=col_vol, name='Volumen'), row=2, col=1)
         fig.add_trace(go.Scatter(x=datos.index, y=datos['RSI'], line=dict(color='purple'), name='RSI'), row=3, col=1)
-        fig.update_layout(height=700, xaxis_rangeslider_visible=False, template="plotly_white")
+        fig.update_layout(height=750, xaxis_rangeslider_visible=False, template="plotly_white")
         st.plotly_chart(fig, use_container_width=True)
 
     with tab2:
-        st.header("📖 Guía de Interpretación de Indicadores")
+        st.header("📖 Guía Completa de la Terminal")
         
-        st.subheader("1. El Color del Volumen")
-        c_v1, c_v2 = st.columns(2)
-        with c_v1:
-            st.success("🟢 **Barra Verde (Volumen Alcista):** Indica que hubo fuerza de compra. El precio cerró arriba.")
-        with c_v2:
-            st.error("🔴 **Barra Roja (Volumen Bajista):** Indica presión de venta. El precio cerró abajo de donde abrió.")
+        st.subheader("1. El Volumen (Barras Inferiores)")
+        v_col1, v_col2 = st.columns(2)
+        with v_col1:
+            st.success("🟢 **Barra Verde:** Los compradores ganaron el día. El precio subió.")
+        with v_col2:
+            st.error("🔴 **Barra Roja:** Los vendedores dominaron. El precio bajó.")
         
         st.divider()
 
-        st.subheader("2. Medias Móviles (Las Líneas)")
+        st.subheader("2. Medias Móviles (Las Líneas de Tendencia)")
         st.markdown("""
-        * **Línea Naranja (MA20):** Tendencia rápida. Si el precio "rebota" aquí, la subida sigue fuerte.
-        * **Línea Azul (MA50):** Tendencia maestra. Si el precio cae debajo de ella, ¡CUIDADO!, la acción entró en racha bajista.
+        * **Línea Naranja (MA20):** Es la tendencia a corto plazo. Si el precio camina por encima, hay buen ritmo.
+        * **Línea Azul (MA50):** Es la tendencia principal. **Regla de Oro:** Si el precio está por debajo de la azul, no compres; espera a que la cruce hacia arriba.
         """)
         
-
         st.divider()
 
-        st.subheader("3. RSI (El Termómetro de Ofertas)")
+        st.subheader("3. RSI (Tu Termómetro de Ofertas)")
         st.markdown("""
-        * **Nivel 70 (Rojo):** La acción está "caliente". Ya subió mucho, todos compraron. Probablemente bajará pronto.
-        * **Nivel 30 (Verde):** La acción está en "oferta". Todos vendieron por miedo. Es un buen momento para buscar compras.
+        * **Nivel 70 (Zona Roja):** Significa 'Sobrecompra'. Está muy caro; la gente está eufórica. ¡Cuidado!
+        * **Nivel 30 (Zona Verde):** Significa 'Sobreventa'. Está en oferta; la gente tiene miedo. ¡Oportunidad!
+        * **Emoji de Fuego 🔥:** Te avisa en la lista de la izquierda cuando una acción toca esta zona de oferta.
         """)
         
-
-[Image of a relative strength index chart with overbought and oversold levels]
-
-
         st.divider()
 
-        st.subheader("4. Lógica de las Señales Automáticas")
-        st.info("🚀 **Compra Fuerte:** Aparece cuando el RSI dice que está barato y la IA ve tendencia positiva.")
-        st.warning("🚩 **Venta:** Aparece cuando el RSI está muy alto (euforia) o el precio rompe la línea azul hacia abajo.")
+        st.subheader("4. Lógica de la Tabla de Señales")
+        st.info("La señal de arriba combina la IA, el RSI y las Medias para decirte si el momento es óptimo, arriesgado o si es mejor solo observar.")
+
+    st.download_button("📥 Descargar Reporte CSV", datos.to_csv().encode('utf-8'), f"analisis_{ticker}.csv")
