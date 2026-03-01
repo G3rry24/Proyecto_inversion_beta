@@ -8,28 +8,41 @@ from sklearn.linear_model import LinearRegression
 from datetime import datetime
 
 #-------------------------------------------------------------------------------
-# 1. CONFIGURACIÓN
+# 1. CONFIGURACIÓN Y ESTILOS MEJORADOS
 #-------------------------------------------------------------------------------
 st.set_page_config(page_title="Terminal Pro Educativa", layout="wide")
 
-# Estilo para que las métricas y contenedores se vean bien en móvil
 st.markdown("""
     <style>
-    [data-testid="stMetric"] { background-color: #f0f2f6; padding: 10px; border-radius: 10px; }
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] { height: 40px; background-color: #f0f2f6; border-radius: 5px; padding: 10px; }
+    /* Tarjeta de Señal (Radar) */
+    .signal-card { 
+        padding: 15px; 
+        border-radius: 10px; 
+        text-align: center; 
+        color: white; 
+        font-weight: bold; 
+        margin-bottom: 15px;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+    }
+    .signal-card h2 { margin: 0; font-size: 1.5rem; color: white; }
+    .signal-card p { margin: 5px 0 0 0; font-size: 1rem; }
+    
+    /* Ajuste de métricas */
+    [data-testid="stMetric"] { background-color: #f8f9fa; border: 1px solid #ddd; padding: 10px; border-radius: 8px; }
+    
+    /* Botones Sidebar */
+    .stButton > button { height: 45px !important; font-size: 12px !important; border-radius: 8px !important; }
     </style>
 """, unsafe_allow_html=True)
 
 #-------------------------------------------------------------------------------
-# 2. SIDEBAR Y SELECCIÓN (WATCHLIST)
+# 2. SIDEBAR (WATCHLIST + TIEMPO)
 #-------------------------------------------------------------------------------
-st.sidebar.title("💎 Mi Cartera")
+st.sidebar.title("💎 Terminal Pro")
 
-# Selector de tiempo (Afecta a la gráfica principal)
 periodo_sel = st.sidebar.select_slider(
-    "Rango de datos:",
-    options=["1mo", "3mo", "6mo", "1y", "2y", "5y"],
+    "Zoom de Tiempo:",
+    options=["1mo", "3mo", "6mo", "1y", "2y"],
     value="6mo"
 )
 
@@ -39,52 +52,32 @@ lista_acciones = ["BIMBOA.MX", "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX", "GENT
 
 if 'ticker_sel' not in st.session_state: st.session_state.ticker_sel = "BIMBOA.MX"
 
-# Generar botones de acciones
+st.sidebar.subheader("Acciones")
 for t in lista_acciones:
-    try:
-        # Mini descarga para saber si sube o baja (comparando hoy vs ayer)
-        mini = yf.download(t, period="5d", progress=False)
-        if not mini.empty:
-            if isinstance(mini.columns, pd.MultiIndex): mini.columns = mini.columns.get_level_values(0)
-            precio_hoy = mini['Close'].iloc[-1]
-            precio_ayer = mini['Close'].iloc[-2]
-            dif = ((precio_hoy - precio_ayer) / precio_ayer) * 100
-            
-            # Emoji según rendimiento
-            icono = "🟢" if dif >= 0 else "🔴"
-            label = f"{icono} {t.split('.')[0]} ({dif:+.1f}%)"
-        else:
-            label = f"⚪ {t}"
-    except:
-        label = f"⚪ {t}"
-    
-    # Si el usuario hace clic, actualiza el estado
-    if st.sidebar.button(label, key=f"btn_{t}", use_container_width=True):
+    # Usamos un identificador visual simple para el rendimiento
+    if st.sidebar.button(f"🔍 {t.split('.')[0]}", key=f"btn_{t}", use_container_width=True):
         st.session_state.ticker_sel = t
 
 #-------------------------------------------------------------------------------
-# 3. CÁLCULOS TÉCNICOS
+# 3. LÓGICA DE INDICADORES (RSI, Bollinger, MACD, IA)
 #-------------------------------------------------------------------------------
 ticker = st.session_state.ticker_sel
-datos = yf.download(ticker, period=periodo_sel, interval="1d")
+datos = yf.download(ticker, period="1y", interval="1d") # Siempre bajamos 1y para cálculos estables
 
-if not datos.empty and len(datos) > 26:
+if not datos.empty and len(datos) > 30:
     if isinstance(datos.columns, pd.MultiIndex): datos.columns = datos.columns.get_level_values(0)
     
-    # Indicadores
+    # Cálculos
     datos['MA20'] = datos['Close'].rolling(20).mean()
-    datos['MA50'] = datos['Close'].rolling(50).mean()
     std_dev = datos['Close'].rolling(20).std()
     datos['BB_High'] = datos['MA20'] + (std_dev * 2)
     datos['BB_Low'] = datos['MA20'] - (std_dev * 2)
     
-    # RSI
     delta = datos['Close'].diff()
     g = (delta.where(delta > 0, 0)).rolling(14).mean()
     l = (-delta.where(delta < 0, 0)).rolling(14).mean()
     datos['RSI'] = 100 - (100 / (1 + (g / l)))
     
-    # MACD
     exp1 = datos['Close'].ewm(span=12, adjust=False).mean()
     exp2 = datos['Close'].ewm(span=26, adjust=False).mean()
     datos['MACD'] = exp1 - exp2
@@ -94,63 +87,76 @@ if not datos.empty and len(datos) > 26:
     X = np.arange(len(datos)).reshape(-1, 1)
     y = datos['Close'].values.flatten()
     mod = LinearRegression().fit(X, y)
-    pred_mañana = mod.predict([[len(datos)]])[0]
-    precio_act = float(y[-1])
+    pred = mod.predict([[len(datos)]])[0]
+    
+    # Datos actuales para el radar
+    u_p = float(y[-1])
+    p_ay = float(y[-2])
+    rsi_act = datos['RSI'].iloc[-1]
+    macd_act = datos['MACD'].iloc[-1]
+    signal_act = datos['Signal'].iloc[-1]
+    bb_low_act = datos['BB_Low'].iloc[-1]
+
+    # --- LÓGICA DEL RADAR (SEÑAL ESTRATÉGICA) ---
+    if rsi_act < 35 and u_p <= bb_low_act * 1.02:
+        estatus, color_s, desc_s = "COMPRA FUERTE 🚀", "#2ecc71", "Precio en oferta extrema y tocando soporte."
+    elif rsi_act < 40 and macd_act > signal_act:
+        estatus, color_s, desc_s = "OPORTUNIDAD 🔥", "#f1c40f", "Indicadores de impulso girando a positivo."
+    elif rsi_act > 70:
+        estatus, color_s, desc_s = "VENTA / CARO 🚩", "#e74c3c", "Riesgo de caída por sobrecompra."
+    else:
+        estatus, color_s, desc_s = "MANTENER 👀", "#3498db", "Precio estable. Sin señales claras de entrada."
+
+    # Filtrar datos según el selector de tiempo para la gráfica
+    datos_plot = datos.tail(60 if periodo_sel == "3mo" else 252 if periodo_sel == "1y" else 126)
 
     #-------------------------------------------------------------------------------
-    # 4. INTERFAZ: PESTAÑAS (TABS)
+    # 4. INTERFAZ VISUAL
     #-------------------------------------------------------------------------------
-    tab1, tab2 = st.tabs(["📊 Gráfica Pro", "📖 Guía de Aprendizaje"])
+    tab1, tab2 = st.tabs(["📊 Terminal", "📖 Guía"])
 
     with tab1:
-        st.subheader(f"Análisis de {ticker}")
+        # EL RADAR (Señal de Compra/Venta)
+        st.markdown(f'''
+            <div class="signal-card" style="background-color:{color_s};">
+                <h2>{estatus}</h2>
+                <p>{desc_s}</p>
+            </div>
+        ''', unsafe_allow_html=True)
         
-        # Métricas rápidas
+        # Métricas
         c1, c2, c3 = st.columns(3)
-        c1.metric("Precio Actual", f"${precio_act:,.2f}")
-        c2.metric("IA Predicción", f"${pred_mañana:,.2f}", f"{pred_mañana - precio_act:+.2f}")
-        c3.metric("RSI (Fuerza)", f"{datos['RSI'].iloc[-1]:.1f}")
+        c1.metric("Precio", f"${u_p:,.2f}", f"{((u_p-p_ay)/p_ay)*100:.2f}%")
+        c2.metric("IA Mañana", f"${pred:,.2f}")
+        c3.metric("RSI", f"{rsi_act:.0f}")
 
-        # Gráfico adaptado a móvil (altura 700px)
-        fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05, 
-                            row_heights=[0.5, 0.25, 0.25])
+        # GRÁFICA OPTIMIZADA (Más compacta para móvil)
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08, row_heights=[0.7, 0.3])
 
-        # 1. Velas y Bollinger
-        fig.add_trace(go.Candlestick(x=datos.index, open=datos['Open'], high=datos['High'], 
-                                     low=datos['Low'], close=datos['Close'], name='Precio'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=datos.index, y=datos['BB_High'], line=dict(color='rgba(150,150,150,0.5)', width=1), name='B.Superior'), row=1, col=1)
-        fig.add_trace(go.Scatter(x=datos.index, y=datos['BB_Low'], line=dict(color='rgba(150,150,150,0.5)', width=1), fill='tonexty', name='B.Inferior'), row=1, col=1)
+        # Precio y Bollinger
+        fig.add_trace(go.Candlestick(x=datos_plot.index, open=datos_plot['Open'], high=datos_plot['High'], 
+                                     low=datos_plot['Low'], close=datos_plot['Close'], name='Velas'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=datos_plot.index, y=datos_plot['BB_High'], line=dict(color='rgba(150,150,150,0.3)'), name='B.Sup'), row=1, col=1)
+        fig.add_trace(go.Scatter(x=datos_plot.index, y=datos_plot['BB_Low'], line=dict(color='rgba(150,150,150,0.3)'), fill='tonexty', name='B.Inf'), row=1, col=1)
         
-        # 2. RSI
-        fig.add_trace(go.Scatter(x=datos.index, y=datos['RSI'], line=dict(color='purple'), name='RSI'), row=2, col=1)
+        # RSI (Combinado con MACD para ahorrar espacio)
+        fig.add_trace(go.Scatter(x=datos_plot.index, y=datos_plot['RSI'], line=dict(color='purple', width=2), name='RSI'), row=2, col=1)
         fig.add_hline(y=70, line_dash="dot", line_color="red", row=2, col=1)
         fig.add_hline(y=30, line_dash="dot", line_color="green", row=2, col=1)
 
-        # 3. MACD
-        fig.add_trace(go.Scatter(x=datos.index, y=datos['MACD'], line=dict(color='blue'), name='MACD'), row=3, col=1)
-        fig.add_trace(go.Scatter(x=datos.index, y=datos['Signal'], line=dict(color='orange'), name='Señal'), row=3, col=1)
-
-        fig.update_layout(height=700, xaxis_rangeslider_visible=False, template="plotly_white", margin=dict(l=10,r=10,t=10,b=10))
+        fig.update_layout(
+            height=500, # Altura ideal para móvil (No estirada)
+            xaxis_rangeslider_visible=False, 
+            margin=dict(l=0, r=0, t=0, b=0),
+            template="plotly_white",
+            showlegend=False
+        )
         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
     with tab2:
-        st.header("📖 ¿Qué significan estos colores?")
-        st.markdown("""
-        ### 1. Los Botones (Watchlist)
-        * **🟢 Verde:** La acción subió ayer.
-        * **🔴 Rojo:** La acción bajó ayer.
-        * **(%) Porcentaje:** Es cuánto cambió el precio en los últimos 5 días.
-
-        ### 2. Bandas de Bollinger (Sombreado Gris)
-        Es un "canal" de volatilidad.
-        * Si el precio se sale por **arriba**, la acción está muy cara.
-        * Si el precio toca la banda de **abajo**, podría ser una oportunidad de compra.
-
-        ### 3. MACD (Líneas Azul y Naranja)
-        * Cuando la **línea azul** cruza hacia arriba a la **naranja**, ¡es señal de compra! 🚀
-        * Si cruza hacia abajo, es señal de que el precio va a caer.
-        """)
-        
+        st.subheader("Manual de la Terminal")
+        st.write("Esta herramienta combina IA y Análisis Técnico.")
+        st.info("🟢 Compra: RSI < 35 | 🔴 Venta: RSI > 70")
 
 else:
-    st.info("Selecciona una acción del menú izquierdo para comenzar el análisis.")
+    st.warning("Selecciona una acción o espera a que carguen los datos.")
