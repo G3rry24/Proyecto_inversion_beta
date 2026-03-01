@@ -66,7 +66,7 @@ with st.expander("Escaneo de RSI en tiempo real", expanded=False):
         except: pass
 
 #-------------------------------------------------------------------------------
-# 3. ANÁLISIS DETALLADO E INTERPRETACIÓN
+# 3. ANÁLISIS DETALLADO
 #-------------------------------------------------------------------------------
 st.markdown("---")
 datos = yf.download(ticker_sel, period=f"{meses}mo", interval="1d")
@@ -85,63 +85,28 @@ if not datos.empty and len(datos) > 50:
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
     datos['RSI'] = 100 - (100 / (1 + (gain / loss)))
     
-    # IA Regresión
+    # IA
     X = np.arange(len(datos)).reshape(-1, 1)
     y = datos['Close'].values.flatten()
     modelo = LinearRegression().fit(X, y)
     datos['Prediccion_IA'] = modelo.predict(X)
     pred_futura = modelo.predict([[len(datos)]])[0]
     ultimo_p = float(y[-1])
-    
-    # Recuperamos la Precisión IA
     precision_ia = guardar_y_validar_prediccion(ticker_sel, pred_futura, ultimo_p)
 
     st.subheader(f"Análisis Detallado: {ticker_sel}")
     
-    # FILA 1: Todas las métricas que tenías antes
+    # FILA 1: TODAS LAS MÉTRICAS RECUPERADAS
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Precio Actual", f"${ultimo_p:.2f}")
     m2.metric("IA Mañana", f"${pred_futura:.2f}", f"{pred_futura - ultimo_p:.2f}")
     m3.metric("Precisión IA", precision_ia)
     m4.metric("RSI Actual", f"{datos['RSI'].iloc[-1]:.1f}")
 
-    # FILA 2: Cuadro de Estrategia
+    # FILA 2: CUADRO DE SEÑAL DE ESTRATEGIA
     rsi_act = datos['RSI'].iloc[-1]
     ma50_act = datos['MA50'].iloc[-1]
     
     if rsi_act < 40 and ultimo_p > ma50_act: señal, color = "COMPRA FUERTE 🚀", "green"
-    elif rsi_act < 40: señal, color = "COMPRA ESPECULATIVA (Riesgo) 🛒", "blue"
-    elif rsi_act > 65: señal, color = "VENTA / SOBRECOMPRA ⚠️", "red"
-    else: señal, color = "MANTENER / NEUTRAL ⚖️", "gray"
-
-    st.markdown(f"""
-        <div style="background-color: rgba(0,0,0,0.05); padding: 20px; border-radius: 10px; border-left: 10px solid {color}; margin-bottom: 20px;">
-            <h3 style="margin:0;">Interpretación de Estrategia: <span style="color:{color};">{señal}</span></h3>
-            <p style="margin:5px 0 0 0;">Basado en RSI y Cruce de Medias Móviles (MA20/MA50).</p>
-        </div>
-    """, unsafe_allow_allow_html=True)
-
-    # Gráfico interactivo triple panel
-    fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.2, 0.15, 0.65])
-    
-    # Panel 1: Velas y Medias
-    fig.add_trace(go.Candlestick(x=datos.index, open=datos['Open'], high=datos['High'], low=datos['Low'], close=datos['Close'], name='Precio'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=datos.index, y=datos['MA20'], line=dict(color='orange', width=2), name='MA20 (Naranja)'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=datos.index, y=datos['MA50'], line=dict(color='blue', width=2), name='MA50 (Azul)'), row=1, col=1)
-    fig.add_trace(go.Scatter(x=datos.index, y=datos['Prediccion_IA'], line=dict(color='red', dash='dot'), name='IA Trend'), row=1, col=1)
-    
-    # Panel 2: Volumen
-    fig.add_trace(go.Bar(x=datos.index, y=datos['Volume'], name='Volumen', marker_color='dodgerblue'), row=2, col=1)
-    
-    # Panel 3: RSI
-    fig.add_trace(go.Scatter(x=datos.index, y=datos['RSI'], line=dict(color='purple', width=2), name='RSI'), row=3, col=1)
-    fig.add_hline(y=70, line_dash="dash", line_color="red", row=3, col=1)
-    fig.add_hline(y=30, line_dash="dash", line_color="green", row=3, col=1)
-    
-    fig.update_layout(height=850, xaxis_rangeslider_visible=False, template="plotly_white", margin=dict(t=30, b=10))
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Botón Descarga
-    st.download_button("📥 Descargar Reporte CSV", datos.to_csv().encode('utf-8'), f"{ticker_sel}_full.csv", "text/csv")
-else:
-    st.error("Cargando suficientes datos históricos (mínimo 50 días)...")
+    elif rsi_act < 40: señal, color = "COMPRA ESPECULATIVA 🛒", "blue"
+    elif rsi_act > 65
