@@ -14,7 +14,7 @@ st.title("📈 Terminal de Inversión Inteligente: BMV")
 
 # Lista de acciones (puedes quitar GAP.MX si sigue fallando, pero aquí el código ya lo tolera)
 lista_acciones = ["BIMBOA.MX", "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX", "GENTERA.MX", 
-                  "CEMEXCPO.MX", "GAP.MX", "FMTY14.MX", "FEMSAUBD.MX", "GMEXICOB.MX","BTC-USD","FUNO11.MX"]
+                  "CEMEXCPO.MX", "FMTY14.MX", "FEMSAUBD.MX", "GMEXICOB.MX","BTC-USD","FUNO11.MX","^GSPC"]
 
 st.sidebar.header("Configuración")
 ticker = st.sidebar.selectbox("Selecciona Acción para Detalle:", lista_acciones)
@@ -127,4 +127,5 @@ if not datos.empty and len(datos) > 20:
     )
     st.pyplot(fig)
 else:
+
     st.error(f"Lo siento, no hay suficientes datos históricos para {ticker} en este momento.")
