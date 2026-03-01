@@ -19,18 +19,15 @@ def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
     else:
         df_hist = pd.DataFrame(columns=['Fecha', 'Ticker', 'Prediccion', 'Precio_Real'])
 
-    # Intentar obtener la precisión de la última vez
     ultima_pred = df_hist[df_hist['Ticker'] == ticker].tail(1)
-    precisión_msg = "Calculando..."
+    precision_msg = "Calculando..."
     
     if not ultima_pred.empty:
         valor_predicho_ayer = ultima_pred['Prediccion'].values[0]
-        # Evitar división por cero
         if precio_actual != 0:
             error = abs((precio_actual - valor_predicho_ayer) / precio_actual) * 100
-            precisión_msg = f"{100 - error:.1f}%"
+            precision_msg = f"{100 - error:.1f}%"
 
-    # Guardar registro de hoy
     nueva_fila = pd.DataFrame([{
         'Fecha': pd.Timestamp.now().strftime('%Y-%m-%d'),
         'Ticker': ticker,
@@ -39,24 +36,23 @@ def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
     }])
     df_hist = pd.concat([df_hist, nueva_fila], ignore_index=True)
     df_hist.to_csv(archivo, index=False)
-    
-    return precisión_msg
+    return precision_msg
 
-# Lista de acciones extendida
 lista_acciones = ["BIMBOA.MX", "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX", "GENTERA.MX", 
                   "CEMEXCPO.MX", "FMTY14.MX", "FEMSAUBD.MX", "GMEXICOB.MX", "BTC-USD", 
                   "FUNO11.MX", "^GSPC", "ALPEKA.MX", "ORBIA.MX"]
 
 st.sidebar.header("Configuración")
-ticker = st.sidebar.selectbox("Selecciona Acción para Detalle:", lista_acciones)
+ticker_sel = st.sidebar.selectbox("Selecciona Acción para Detalle:", lista_acciones)
 meses = st.sidebar.slider("Meses de historial", 1, 24, 6)
 
 #-------------------------------------------------------------------------------
-# 2. RADAR DE OPORTUNIDADES (REDIMENSIONADO)
+# 2. RADAR DE OPORTUNIDADES Y GANADORA DEL DÍA
 #-------------------------------------------------------------------------------
 st.subheader("🚀 Radar de Oportunidades")
+datos_radar = []
+
 with st.expander("Estado actual del mercado", expanded=True):
-    # Ajuste de diseño: 4 columnas por fila para que quepan muchas acciones
     cols_por_fila = 4
     for i in range(0, len(lista_acciones), cols_por_fila):
         fila_tickers = lista_acciones[i:i+cols_por_fila]
@@ -65,20 +61,17 @@ with st.expander("Estado actual del mercado", expanded=True):
         for j, t in enumerate(fila_tickers):
             try:
                 d_check = yf.download(t, period="1mo", interval="1d", progress=False)
-                if d_check.empty or len(d_check) < 15:
-                    cols[j].warning(f"**{t}**\n\nSin Datos")
-                    continue
-
-                if isinstance(d_check.columns, pd.MultiIndex):
-                    d_check.columns = d_check.columns.get_level_values(0)
+                if d_check.empty or len(d_check) < 15: continue
+                if isinstance(d_check.columns, pd.MultiIndex): d_check.columns = d_check.columns.get_level_values(0)
                 
+                # Cálculo RSI Express
                 delta = d_check['Close'].diff()
                 gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
                 loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-                rs = gain / loss
-                rsi_val = (100 - (100 / (1 + rs))).values[-1]
+                rsi_val = (100 - (100 / (1 + (gain / loss)))).values[-1]
+                
+                datos_radar.append({"ticker": t, "rsi": rsi_val})
 
-                # Card de visualización compacto
                 if rsi_val < 35:
                     cols[j].success(f"**{t}** \n💰 RSI: {rsi_val:.1f}  \n**COMPRA**")
                 elif rsi_val > 65:
@@ -88,51 +81,63 @@ with st.expander("Estado actual del mercado", expanded=True):
             except:
                 cols[j].error(f"**{t}**\n\nError")
 
+# Mostrar la Ganadora del Día
+if datos_radar:
+    ganadora = min(datos_radar, key=lambda x: x['rsi'])
+    st.warning(f"🏆 **Oportunidad Top del Día:** {ganadora['ticker']} con un RSI de {ganadora['rsi']:.1f}. (La más descontada)")
+
 #-------------------------------------------------------------------------------
-# 3. ANÁLISIS DETALLADO E IA
+# 3. ANÁLISIS DETALLADO, IA Y DESCARGA
 #-------------------------------------------------------------------------------
 st.markdown("---")
-datos = yf.download(ticker, period=f"{meses}mo", interval="1d")
+datos = yf.download(ticker_sel, period=f"{meses}mo", interval="1d")
 
 if not datos.empty and len(datos) > 20:
-    if isinstance(datos.columns, pd.MultiIndex):
-        datos.columns = datos.columns.get_level_values(0)
+    if isinstance(datos.columns, pd.MultiIndex): datos.columns = datos.columns.get_level_values(0)
 
-    # Indicadores
+    # --- CÁLCULOS TÉCNICOS ---
     datos['MA20'] = datos['Close'].rolling(window=20).mean()
     std_dev = datos['Close'].rolling(window=20).std()
     datos['B_Sup'] = datos['MA20'] + (std_dev * 2)
     datos['B_Inf'] = datos['MA20'] - (std_dev * 2)
-
-    # IA y Validación
-    X = np.arange(len(datos)).reshape(-1, 1)
-    y = datos['Close'].values.flatten()
-    modelo = LinearRegression().fit(X, y)
-    pred_mañana = modelo.predict([[len(datos)]])[0]
-    ultimo_precio = float(y[-1])
     
-    # Llamada al nuevo módulo de validación
-    precision = guardar_y_validar_prediccion(ticker, pred_mañana, ultimo_precio)
-
-    # Dashboard
-    st.subheader(f"Análisis Detallado: {ticker}")
-    c1, c2, c3, c4 = st.columns(4)
-    
-    c1.metric("Precio Actual", f"${ultimo_precio:.2f}")
-    c2.metric("IA Mañana", f"${pred_mañana:.2f}", f"{pred_mañana - ultimo_precio:.2f}")
-    c3.metric("Precisión de IA", precision)
-    
-    # RSI en métrica
     delta_d = datos['Close'].diff()
     g_d = (delta_d.where(delta_d > 0, 0)).rolling(window=14).mean()
     l_d = (-delta_d.where(delta_d < 0, 0)).rolling(window=14).mean()
-    rsi_hoy = (100 - (100 / (1 + (g_d / l_d)))).values[-1]
-    c4.metric("RSI Actual", f"{rsi_hoy:.1f}")
+    datos['RSI'] = 100 - (100 / (1 + (g_d / l_d)))
 
-    # Gráfico Profesional
+    # IA Regresión Lineal
+    X = np.arange(len(datos)).reshape(-1, 1)
+    y = datos['Close'].values.flatten()
+    modelo = LinearRegression().fit(X, y)
+    datos['Prediccion_IA'] = modelo.predict(X)
+    
+    pred_futura = modelo.predict([[len(datos)]])[0]
+    ultimo_p = float(y[-1])
+    precision = guardar_y_validar_prediccion(ticker_sel, pred_futura, ultimo_p)
+
+    # --- INTERFAZ ---
+    st.subheader(f"Análisis Detallado: {ticker_sel}")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Precio Actual", f"${ultimo_p:.2f}")
+    c2.metric("IA Mañana", f"${pred_futura:.2f}", f"{pred_futura - ultimo_p:.2f}")
+    c3.metric("Precisión Histórica", precision)
+    c4.metric("RSI Actual", f"{datos['RSI'].iloc[-1]:.1f}")
+
+    # --- BOTÓN DE DESCARGA ---
+    csv = datos.to_csv().encode('utf-8')
+    st.download_button(
+        label="📥 Descargar Datos con Indicadores (CSV)",
+        data=csv,
+        file_name=f'analisis_{ticker_sel}_{datetime.now().strftime("%Y%m%d")}.csv',
+        mime='text/csv',
+    )
+
+    # Gráfico
     apds = [
         mpf.make_addplot(datos['B_Sup'], color='gray', linestyle='--', width=0.8),
         mpf.make_addplot(datos['B_Inf'], color='gray', linestyle='--', width=0.8),
+        mpf.make_addplot(datos['Prediccion_IA'], color='orange', width=1.0) # Línea de tendencia IA
     ]
     mc = mpf.make_marketcolors(up='g', down='r', inherit=True)
     s = mpf.make_mpf_style(marketcolors=mc, gridstyle='--', y_on_right=True)
@@ -143,6 +148,3 @@ if not datos.empty and len(datos) > 20:
         fill_between=dict(y1=datos['B_Sup'].values, y2=datos['B_Inf'].values, alpha=0.1, color='gray')
     )
     st.pyplot(fig)
-else:
-    st.error("No hay suficientes datos.")
-
