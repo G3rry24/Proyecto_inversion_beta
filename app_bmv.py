@@ -9,41 +9,84 @@ import os
 from datetime import datetime
 
 # ------------------------------------------------------------------------------
-# 1. CONFIGURACIÓN GENERAL
+# CONFIGURACIÓN
 # ------------------------------------------------------------------------------
 
-st.set_page_config(page_title="Terminal Pro Educativa", layout="wide")
+st.set_page_config(page_title="Terminal Pro Dark", layout="wide")
 
 st.markdown("""
 <style>
 
-[data-testid="stSidebar"] button {
-    padding: 6px !important;
-    font-size: 12px !important;
-    border-radius: 8px !important;
+/* Fondo general */
+.stApp {
+    background-color: #0f172a;
+    color: #e2e8f0;
 }
 
-.stMetric {
-    background-color: #ffffff;
-    border: 1px solid #eeeeee;
-    padding: 12px;
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background-color: #111827;
+}
+
+/* Tarjetas Watchlist */
+.watch-card {
+    background-color: #1f2937;
+    padding: 10px 14px;
     border-radius: 10px;
+    margin-bottom: 8px;
+    border: 1px solid #374151;
+    transition: all 0.2s ease-in-out;
 }
 
-.signal-card {
-    padding: 18px;
+.watch-card:hover {
+    background-color: #273449;
+    transform: translateX(3px);
+}
+
+.watch-active {
+    border: 1px solid #22c55e;
+    background-color: #1e293b;
+}
+
+.watch-ticker {
+    font-weight: 600;
+    font-size: 14px;
+    color: #f1f5f9;
+}
+
+.watch-price {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+/* Botones invisibles */
+[data-testid="baseButton-secondary"] {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+/* Métricas */
+.stMetric {
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    padding: 14px;
     border-radius: 12px;
+}
+
+/* Señal */
+.signal-card {
+    padding: 20px;
+    border-radius: 14px;
     text-align: center;
-    color: white;
     font-weight: bold;
     margin-bottom: 20px;
 }
 
-/* Ajustes para móvil */
+/* Adaptativo */
 @media (max-width: 768px) {
     .stMetric {
-        padding: 8px !important;
-        font-size: 14px !important;
+        padding: 10px !important;
     }
     .signal-card h2 {
         font-size: 18px !important;
@@ -55,12 +98,12 @@ st.markdown("""
 
 
 # ------------------------------------------------------------------------------
-# 2. FUNCIONES CON CACHÉ
+# FUNCIONES
 # ------------------------------------------------------------------------------
 
 @st.cache_data(ttl=900)
-def descargar_datos(ticker, periodo="6mo", intervalo="1d"):
-    datos = yf.download(ticker, period=periodo, interval=intervalo, progress=False)
+def descargar_datos(ticker):
+    datos = yf.download(ticker, period="6mo", interval="1d", progress=False)
     if not datos.empty and isinstance(datos.columns, pd.MultiIndex):
         datos.columns = datos.columns.get_level_values(0)
     return datos
@@ -71,16 +114,13 @@ def mini_resumen(ticker):
     mini = yf.download(ticker, period="30d", progress=False)
     if mini.empty:
         return None, None
-
     if isinstance(mini.columns, pd.MultiIndex):
         mini.columns = mini.columns.get_level_values(0)
-
     precio = mini['Close'].iloc[-1]
     delta = mini['Close'].diff()
     g = (delta.where(delta > 0, 0)).rolling(14).mean()
     l = (-delta.where(delta < 0, 0)).rolling(14).mean()
     rsi = 100 - (100 / (1 + (g / l))).iloc[-1]
-
     return precio, rsi
 
 
@@ -96,9 +136,9 @@ def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
     precision_msg = "Calculando..."
 
     if not ultima_pred.empty:
-        valor_predicho_ayer = ultima_pred['Prediccion'].values[0]
+        valor_predicho = ultima_pred['Prediccion'].values[0]
         if precio_actual != 0:
-            error = abs((precio_actual - valor_predicho_ayer) / precio_actual) * 100
+            error = abs((precio_actual - valor_predicho) / precio_actual) * 100
             precision_msg = f"{100 - error:.1f}%"
 
     nueva_fila = pd.DataFrame([{
@@ -115,38 +155,43 @@ def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
 
 
 # ------------------------------------------------------------------------------
-# 3. WATCHLIST (OPTIMIZADA)
+# WATCHLIST
 # ------------------------------------------------------------------------------
 
 lista_acciones = [
-    "BIMBOA.MX", "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX",
-    "GENTERA.MX", "CEMEXCPO.MX", "FMTY14.MX", "FEMSAUBD.MX",
-    "GMEXICOB.MX", "BTC-USD", "FUNO11.MX", "^GSPC",
-    "ALPEKA.MX", "ORBIA.MX", "GAPB.MX"
+    "BIMBOA.MX","WALMEX.MX","FIBRAPL14.MX","GFNORTEO.MX",
+    "GENTERA.MX","CEMEXCPO.MX","FMTY14.MX","FEMSAUBD.MX",
+    "GMEXICOB.MX","BTC-USD","FUNO11.MX","^GSPC",
+    "ALPEKA.MX","ORBIA.MX","GAPB.MX"
 ]
 
 if 'ticker_sel' not in st.session_state:
     st.session_state.ticker_sel = "BIMBOA.MX"
 
-st.sidebar.title("💎 Watchlist")
+st.sidebar.markdown("## 💎 Watchlist")
 
 for ticker in lista_acciones:
-    try:
-        precio, rsi = mini_resumen(ticker)
-        if precio:
-            fuego = "🔥" if rsi and rsi < 35 else ""
-            label = f"{fuego} {ticker.split('.')[0]} - ${precio:,.2f}"
-        else:
-            label = ticker.split('.')[0]
-    except:
-        label = ticker.split('.')[0]
 
-    if st.sidebar.button(label, key=f"btn_{ticker}", use_container_width=True):
+    precio, rsi = mini_resumen(ticker)
+    fuego = "🔥" if rsi and rsi < 35 else ""
+    nombre = ticker.split('.')[0]
+    activo = "watch-active" if ticker == st.session_state.ticker_sel else ""
+
+    card_html = f"""
+    <div class="watch-card {activo}">
+        <div class="watch-ticker">{fuego} {nombre}</div>
+        <div class="watch-price">${precio:,.2f}</div>
+    </div>
+    """
+
+    if st.sidebar.button(card_html, key=ticker):
         st.session_state.ticker_sel = ticker
+
+    st.sidebar.markdown(card_html, unsafe_allow_html=True)
 
 
 # ------------------------------------------------------------------------------
-# 4. PROCESAMIENTO PRINCIPAL
+# PROCESAMIENTO PRINCIPAL
 # ------------------------------------------------------------------------------
 
 ticker = st.session_state.ticker_sel
@@ -162,10 +207,9 @@ if not datos.empty and len(datos) > 50:
     l = (-delta.where(delta < 0, 0)).rolling(14).mean()
     datos['RSI'] = 100 - (100 / (1 + (g / l)))
 
-    col_vol = ['#26a69a' if c >= o else '#ef5350'
+    col_vol = ['#22c55e' if c >= o else '#ef4444'
                for c, o in zip(datos['Close'], datos['Open'])]
 
-    # Modelo lineal simple (educativo)
     X = np.arange(len(datos)).reshape(-1, 1)
     y = datos['Close'].values.flatten()
     modelo = LinearRegression().fit(X, y)
@@ -178,19 +222,14 @@ if not datos.empty and len(datos) > 50:
 
     confianza = guardar_y_validar_prediccion(ticker, pred, precio_actual)
 
-    # Señal
     if rsi_actual < 35 and precio_actual > ma50_actual:
-        estatus, color_s = "COMPRA FUERTE 🚀", "#2ecc71"
+        estatus, color_s = "COMPRA FUERTE 🚀", "#16a34a"
     elif rsi_actual < 35:
-        estatus, color_s = "COMPRA (Oferta) 🔥", "#f1c40f"
+        estatus, color_s = "COMPRA 🔥", "#eab308"
     elif rsi_actual > 70:
-        estatus, color_s = "VENTA (Caro) 🚩", "#e74c3c"
+        estatus, color_s = "VENTA 🚩", "#dc2626"
     else:
-        estatus, color_s = "MANTENER 👀", "#3498db"
-
-    # ------------------------------------------------------------------------------
-    # 5. INTERFAZ PRINCIPAL (ADAPTATIVA)
-    # ------------------------------------------------------------------------------
+        estatus, color_s = "MANTENER 👀", "#2563eb"
 
     st.markdown(
         f'<div class="signal-card" style="background-color:{color_s};">'
@@ -198,21 +237,18 @@ if not datos.empty and len(datos) > 50:
         unsafe_allow_html=True
     )
 
-    # Métricas en formato 2x2 (mejor para móvil)
     col1, col2 = st.columns(2)
     col3, col4 = st.columns(2)
 
     col1.metric("Precio Actual", f"${precio_actual:,.2f}",
                 f"{((precio_actual - precio_ayer)/precio_ayer)*100:.2f}%")
 
-    col2.metric("Predicción (Modelo Lineal)",
-                f"${pred:,.2f}",
+    col2.metric("Predicción Lineal", f"${pred:,.2f}",
                 f"{pred - precio_actual:.2f}")
 
-    col3.metric("Precisión Última Predicción", confianza)
+    col3.metric("Precisión Última", confianza)
     col4.metric("RSI", f"{rsi_actual:.1f}")
 
-    # Gráfico compacto
     fig = make_subplots(
         rows=3, cols=1,
         shared_xaxes=True,
@@ -230,53 +266,40 @@ if not datos.empty and len(datos) > 50:
     ), row=1, col=1)
 
     fig.add_trace(go.Scatter(
-        x=datos.index,
-        y=datos['MA20'],
-        name='MA20',
-        line=dict(width=1.5)
+        x=datos.index, y=datos['MA20'],
+        name='MA20', line=dict(width=1.5)
     ), row=1, col=1)
 
     fig.add_trace(go.Scatter(
-        x=datos.index,
-        y=datos['MA50'],
-        name='MA50',
-        line=dict(width=1.5)
+        x=datos.index, y=datos['MA50'],
+        name='MA50', line=dict(width=1.5)
     ), row=1, col=1)
 
     fig.add_trace(go.Bar(
-        x=datos.index,
-        y=datos['Volume'],
-        marker_color=col_vol,
-        name='Volumen'
+        x=datos.index, y=datos['Volume'],
+        marker_color=col_vol, name='Volumen'
     ), row=2, col=1)
 
     fig.add_trace(go.Scatter(
-        x=datos.index,
-        y=datos['RSI'],
-        name='RSI',
-        line=dict(width=1.5)
+        x=datos.index, y=datos['RSI'],
+        name='RSI', line=dict(width=1.5)
     ), row=3, col=1)
 
     fig.update_layout(
         height=600,
-        template="plotly_white",
-        xaxis_rangeslider_visible=False,
-        margin=dict(l=10, r=10, t=30, b=10)
+        template="plotly_dark",
+        margin=dict(l=10, r=10, t=30, b=10),
+        xaxis_rangeslider_visible=False
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    # Guía colapsable (mejor en móvil)
-    with st.expander("📖 Guía Educativa"):
+    with st.expander("📖 Explicación del Modelo"):
         st.write("""
-        Este modelo usa:
-
-        - Medias móviles (MA20 y MA50) para identificar tendencia.
-        - RSI para detectar sobrecompra y sobreventa.
-        - Regresión lineal simple como aproximación educativa de tendencia.
-        
-        Importante: La regresión lineal es solo una extrapolación matemática.
-        No predice eventos inesperados ni cambios estructurales del mercado.
+        Este sistema usa medias móviles y RSI para detectar momentum
+        y una regresión lineal simple como modelo educativo de tendencia.
+        No predice eventos inesperados ni noticias.
+        Es una herramienta analítica, no un oráculo.
         """)
 
     st.download_button(
