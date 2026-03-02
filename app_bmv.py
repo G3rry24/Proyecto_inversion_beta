@@ -9,7 +9,7 @@ import os
 from datetime import datetime
 
 # ------------------------------------------------------------------------------
-# CONFIGURACIÓN
+# CONFIGURACIÓN GENERAL
 # ------------------------------------------------------------------------------
 
 st.set_page_config(page_title="Terminal Pro Dark", layout="wide")
@@ -17,53 +17,13 @@ st.set_page_config(page_title="Terminal Pro Dark", layout="wide")
 st.markdown("""
 <style>
 
-/* Fondo general */
 .stApp {
     background-color: #0f172a;
     color: #e2e8f0;
 }
 
-/* Sidebar */
 [data-testid="stSidebar"] {
     background-color: #111827;
-}
-
-/* Tarjetas Watchlist */
-.watch-card {
-    background-color: #1f2937;
-    padding: 10px 14px;
-    border-radius: 10px;
-    margin-bottom: 8px;
-    border: 1px solid #374151;
-    transition: all 0.2s ease-in-out;
-}
-
-.watch-card:hover {
-    background-color: #273449;
-    transform: translateX(3px);
-}
-
-.watch-active {
-    border: 1px solid #22c55e;
-    background-color: #1e293b;
-}
-
-.watch-ticker {
-    font-weight: 600;
-    font-size: 14px;
-    color: #f1f5f9;
-}
-
-.watch-price {
-    font-size: 12px;
-    color: #94a3b8;
-}
-
-/* Botones invisibles */
-[data-testid="baseButton-secondary"] {
-    background: transparent !important;
-    border: none !important;
-    padding: 0 !important;
 }
 
 /* Métricas */
@@ -83,14 +43,20 @@ st.markdown("""
     margin-bottom: 20px;
 }
 
-/* Adaptativo */
-@media (max-width: 768px) {
-    .stMetric {
-        padding: 10px !important;
-    }
-    .signal-card h2 {
-        font-size: 18px !important;
-    }
+/* Botones sidebar */
+.sidebar-btn button {
+    width: 100%;
+    background-color: #1f2937 !important;
+    color: #f1f5f9 !important;
+    border: 1px solid #374151 !important;
+    border-radius: 10px !important;
+    padding: 10px !important;
+    text-align: left !important;
+    transition: 0.2s;
+}
+
+.sidebar-btn button:hover {
+    background-color: #273449 !important;
 }
 
 </style>
@@ -173,21 +139,24 @@ st.sidebar.markdown("## 💎 Watchlist")
 for ticker in lista_acciones:
 
     precio, rsi = mini_resumen(ticker)
-    fuego = "🔥" if rsi and rsi < 35 else ""
     nombre = ticker.split('.')[0]
-    activo = "watch-active" if ticker == st.session_state.ticker_sel else ""
+    fuego = "🔥" if rsi and rsi < 35 else ""
 
-    card_html = f"""
-    <div class="watch-card {activo}">
-        <div class="watch-ticker">{fuego} {nombre}</div>
-        <div class="watch-price">${precio:,.2f}</div>
-    </div>
-    """
+    activo = ticker == st.session_state.ticker_sel
 
-    if st.sidebar.button(card_html, key=ticker):
+    label = f"{fuego} {nombre}\n${precio:,.2f}" if precio else nombre
+
+    st.sidebar.markdown('<div class="sidebar-btn">', unsafe_allow_html=True)
+    if st.sidebar.button(label, key=ticker):
         st.session_state.ticker_sel = ticker
+        st.rerun()
+    st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
-    st.sidebar.markdown(card_html, unsafe_allow_html=True)
+    if activo:
+        st.sidebar.markdown(
+            "<div style='height:4px;background:#22c55e;margin-bottom:8px;border-radius:4px;'></div>",
+            unsafe_allow_html=True
+        )
 
 
 # ------------------------------------------------------------------------------
@@ -296,10 +265,9 @@ if not datos.empty and len(datos) > 50:
 
     with st.expander("📖 Explicación del Modelo"):
         st.write("""
-        Este sistema usa medias móviles y RSI para detectar momentum
-        y una regresión lineal simple como modelo educativo de tendencia.
-        No predice eventos inesperados ni noticias.
-        Es una herramienta analítica, no un oráculo.
+        Se usan medias móviles y RSI para detectar momentum.
+        La predicción es una regresión lineal simple con fines educativos.
+        No anticipa noticias ni eventos inesperados.
         """)
 
     st.download_button(
