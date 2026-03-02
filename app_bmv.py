@@ -99,7 +99,7 @@ def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
     return precision_msg
 
 # ------------------------------------------------------------------------------
-# 3. WATCHLIST OPTIMIZADA
+# 3. WATCHLIST Y RESUMEN DIARIO (SIDEBAR)
 # ------------------------------------------------------------------------------
 lista_acciones = ["NAFTRAC.MX", "FIBRATC.MX", "IVVPESO.MX", "GENTERA.MX", "BTC-USD"]
 
@@ -107,19 +107,33 @@ if 'ticker_sel' not in st.session_state:
     st.session_state.ticker_sel = "NAFTRAC.MX"
 
 st.sidebar.title("💎 Mi Portafolio")
+
+# Lógica del Resumen Diario antes de los botones
 alertas_hoy = []
+precios_sidebar = {}
 
 for t in lista_acciones:
-    precio, rsi = mini_resumen(t)
+    p, r = mini_resumen(t)
+    precios_sidebar[t] = (p, r)
+    if r and r < 35:
+        alertas_hoy.append(t.split('.')[0])
+
+# Cuadro de Resumen arriba
+with st.sidebar.container():
+    st.subheader("📢 Resumen Diario")
+    if alertas_hoy:
+        st.warning(f"Oportunidades: {len(alertas_hoy)}\n\nRevisar: {', '.join(alertas_hoy)}")
+    else:
+        st.success("Sin alertas de sobreventa (RSI > 35)")
+st.sidebar.divider()
+
+# Botones de la Watchlist
+for t in lista_acciones:
+    precio, rsi = precios_sidebar[t]
     fuego = "🔥" if rsi and rsi < 35 else ""
-    if fuego: alertas_hoy.append(t)
     label = f"{fuego} {t.split('.')[0]} - ${precio:,.2f}" if precio else t
     if st.sidebar.button(label, key=f"btn_{t}", use_container_width=True):
         st.session_state.ticker_sel = t
-
-st.sidebar.divider()
-st.sidebar.subheader("📢 Resumen Diario")
-st.sidebar.info(f"Oportunidades RSI: {len(alertas_hoy)}")
 
 # ------------------------------------------------------------------------------
 # 4. PROCESAMIENTO PRINCIPAL
@@ -182,7 +196,6 @@ if not datos.empty and len(datos) > 50:
     # ------------------------------------------------------------------------------
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.7, 0.3])
 
-    # Velas y Medias
     fig.add_trace(go.Candlestick(x=datos.index, open=datos['Open'], high=datos['High'], low=datos['Low'], close=datos['Close'], name='Precio'), row=1, col=1)
     fig.add_trace(go.Scatter(x=datos.index, y=datos['MA50'], name='Tendencia (MA50)', line=dict(color='orange', width=1.5)), row=1, col=1)
 
@@ -207,4 +220,4 @@ if not datos.empty and len(datos) > 50:
         st.download_button("Descargar CSV del análisis", datos.to_csv().encode('utf-8'), f"{ticker}_analisis.csv")
 
 else:
-    st.error("No se pudieron cargar los datos. Verifica el Ticker o la conexión.")
+    st.error("No se pudieron cargar los datos.")
