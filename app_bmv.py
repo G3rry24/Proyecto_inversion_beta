@@ -119,10 +119,19 @@ def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
 # ------------------------------------------------------------------------------
 
 lista_acciones = [
-    "BIMBOA.MX", "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX",
-    "GENTERA.MX", "CEMEXCPO.MX", "FMTY14.MX", "FEMSAUBD.MX",
-    "GMEXICOB.MX", "BTC-USD", "FUNO11.MX", "^GSPC",
-    "ALPEKA.MX", "ORBIA.MX", "GAPB.MX"
+    # --- MÉXICO (ACCIONES Y FIBRAS) ---
+    "NAFTRAC.MX",   # ETF de las 35 empresas más grandes de México (IPC)
+    "GENTERA.MX",   # Acción específica: Sector microfinanzas
+    "FIBRATC.MX",   # ETF de Fibras Mexicanas (Bienes Raíces locales)
+
+    # --- ESTADOS UNIDOS (ACCIONES Y REITS) ---
+    "IVVPESO.MX",   # S&P 500 con protección cambiaria (Ideal para operar en MX)
+    "^GSPC",        # Índice S&P 500 (Referencia directa del mercado global)
+    "PLD",          # Prologis: El REIT (Fibra) líder en logística y naves industriales en EE.UU.
+
+    # --- CRIPTOMONEDAS (ACTIVOS DIGITALES) ---
+    "BTC-USD",      # Bitcoin: Reserva de valor digital
+    "ETH-USD"       # Ethereum: Plataforma de contratos inteligentes y finanzas descentralizadas
 ]
 
 if 'ticker_sel' not in st.session_state:
