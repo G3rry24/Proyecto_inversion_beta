@@ -119,10 +119,11 @@ def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
 # ------------------------------------------------------------------------------
 
 lista_acciones = [
-    "BIMBOA.MX", "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX",
-    "GENTERA.MX", "CEMEXCPO.MX", "FMTY14.MX", "FEMSAUBD.MX",
-    "GMEXICOB.MX", "BTC-USD", "FUNO11.MX", "^GSPC",
-    "ALPEKA.MX", "ORBIA.MX", "GAPB.MX"
+    "WALMEX.MX", "FIBRAPL14.MX", "GFNORTEO.MX",
+    "GENTERA.MX", "FMTY14.MX", "FEMSAUBD.MX",
+    "BTC-USD", "FUNO11.MX", "^GSPC",
+    "GAPB.MX", "NAFTRAC.MX", "FIBRATC.MX",
+    "IVVPESO.MX"
 ]
 
 if 'ticker_sel' not in st.session_state:
