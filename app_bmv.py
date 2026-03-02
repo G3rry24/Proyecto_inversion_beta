@@ -122,7 +122,7 @@ lista_acciones = [
     # --- MÉXICO (ACCIONES Y FIBRAS) ---
     "NAFTRAC.MX",   # ETF de las 35 empresas más grandes de México (IPC)
     "GENTERA.MX",   # Acción específica: Sector microfinanzas
-    "FIBRATC.MX",   # ETF de Fibras Mexicanas (Bienes Raíces locales)
+    "FIBRATC14.MX",   # ETF de Fibras Mexicanas (Bienes Raíces locales)
 
     # --- ESTADOS UNIDOS (ACCIONES Y REITS) ---
     "IVVPESO.MX",   # S&P 500 con protección cambiaria (Ideal para operar en MX)
