@@ -131,7 +131,7 @@ lista_acciones = [
     "FUNO11.MX",
     "GMEXICOB.MX",
     "VOLARA.MX",
-    "GENTERA.MX
+    "GENTERA.MX"
 ]
 
 if 'ticker_sel' not in st.session_state:
