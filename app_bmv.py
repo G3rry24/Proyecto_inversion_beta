@@ -35,7 +35,6 @@ st.markdown("""
     font-weight: bold;
     margin-bottom: 20px;
 }
-/* Ajustes para móvil */
 @media (max-width: 768px) {
     .stMetric {
         padding: 8px !important;
@@ -121,7 +120,7 @@ def guardar_y_validar_prediccion(ticker, pred_hoy, precio_actual):
     return precision_msg
 
 # ------------------------------------------------------------------------------
-# 3. WATCHLIST, BUSCADOR Y FILTROS (BARRA LATERAL)
+# 3. WATCHLIST Y BUSCADOR (BARRA LATERAL)
 # ------------------------------------------------------------------------------
 
 lista_acciones = [
@@ -132,7 +131,7 @@ lista_acciones = [
     "FUNO11.MX",
     "GMEXICOB.MX",
     "VOLARA.MX",
-    "GENTERA.MX"
+    "GENTERA.MX,
 ]
 
 if 'ticker_sel' not in st.session_state:
@@ -154,7 +153,6 @@ for ticker in lista_acciones:
     if st.sidebar.button(label, key=f"btn_{ticker}", use_container_width=True):
         st.session_state.ticker_sel = ticker
 
-# --- BUSCADOR LIBRE ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("🔍 Buscar Activo")
 ticker_custom = st.sidebar.text_input("Símbolo (ej. AAPL, TSLA, AMZN):", value="").upper()
@@ -163,40 +161,32 @@ if st.sidebar.button("Analizar Ticker", type="primary", use_container_width=True
     if ticker_custom:
         st.session_state.ticker_sel = ticker_custom
 
-# --- NUEVA SECCIÓN: RANGO DE TIEMPO ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("📅 Rango de Tiempo")
 
-# Diccionario para mapear la opción amigable al formato de yfinance
 opciones_periodo = {
-    "1 Mes": "1mo",
-    "3 Meses": "3mo",
-    "6 Meses": "6mo",
-    "1 Año": "1y",
-    "2 Años": "2y",
-    "Máximo Histórico": "max"
+    "1 Mes": "1mo", "3 Meses": "3mo", "6 Meses": "6mo",
+    "1 Año": "1y", "2 Años": "2y", "Máximo Histórico": "max"
 }
 
 seleccion_usuario = st.sidebar.selectbox(
     "Selecciona el periodo del gráfico:",
     options=list(opciones_periodo.keys()),
-    index=2 # El índice 2 corresponde a "6 Meses" por defecto
+    index=2
 )
-
 periodo_api = opciones_periodo[seleccion_usuario]
-# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
-# 4. PROCESAMIENTO PRINCIPAL
+# 4. PROCESAMIENTO PRINCIPAL (CON MACD Y ATR)
 # ------------------------------------------------------------------------------
 
 ticker = st.session_state.ticker_sel
 st.title(f"Análisis Técnico: {ticker}")
 
-# Descargamos los datos usando el periodo seleccionado por el usuario
 datos = descargar_datos(ticker, periodo=periodo_api)
 
 if not datos.empty and len(datos) > 50:
+    # --- 4.1 Medias Móviles y RSI ---
     datos['MA20'] = datos['Close'].rolling(20).mean()
     datos['MA50'] = datos['Close'].rolling(50).mean()
 
@@ -206,8 +196,23 @@ if not datos.empty and len(datos) > 50:
     rs = g / l.replace(0, 1e-10)
     datos['RSI'] = 100 - (100 / (1 + rs))
 
-    col_vol = ['#26a69a' if c >= o else '#ef5350' 
-               for c, o in zip(datos['Close'], datos['Open'])]
+    # --- 4.2 MACD (Moving Average Convergence Divergence) ---
+    datos['EMA12'] = datos['Close'].ewm(span=12, adjust=False).mean()
+    datos['EMA26'] = datos['Close'].ewm(span=26, adjust=False).mean()
+    datos['MACD_Line'] = datos['EMA12'] - datos['EMA26']
+    datos['MACD_Signal'] = datos['MACD_Line'].ewm(span=9, adjust=False).mean()
+    datos['MACD_Hist'] = datos['MACD_Line'] - datos['MACD_Signal']
+
+    # --- 4.3 ATR (Average True Range) para Stop Loss ---
+    datos['Prev_Close'] = datos['Close'].shift(1)
+    datos['TR'] = np.maximum((datos['High'] - datos['Low']),
+                  np.maximum(abs(datos['High'] - datos['Prev_Close']),
+                             abs(datos['Low'] - datos['Prev_Close'])))
+    datos['ATR'] = datos['TR'].ewm(alpha=1/14, adjust=False).mean()
+
+    # --- 4.4 Cálculos de variables actuales ---
+    col_vol = ['#26a69a' if c >= o else '#ef5350' for c, o in zip(datos['Close'], datos['Open'])]
+    col_macd = ['#26a69a' if val >= 0 else '#ef5350' for val in datos['MACD_Hist']]
 
     X = np.arange(len(datos)).reshape(-1, 1)
     y = datos['Close'].values.flatten()
@@ -218,15 +223,23 @@ if not datos.empty and len(datos) > 50:
     precio_ayer = float(y[-2])
     rsi_actual = float(datos['RSI'].iloc[-1])
     ma50_actual = float(datos['MA50'].iloc[-1])
+    macd_line_actual = float(datos['MACD_Line'].iloc[-1])
+    macd_signal_actual = float(datos['MACD_Signal'].iloc[-1])
+    atr_actual = float(datos['ATR'].iloc[-1])
+
+    # Gestión de Riesgo: Stop Loss a 1.5 ATR de distancia
+    stop_loss_sugerido = precio_actual - (1.5 * atr_actual)
 
     confianza = guardar_y_validar_prediccion(ticker, pred, precio_actual)
 
-    if rsi_actual < 35 and precio_actual > ma50_actual:
-        estatus, color_s = "COMPRA FUERTE 🚀", "#2ecc71"
-    elif rsi_actual < 35:
-        estatus, color_s = "COMPRA (Oferta) 🔥", "#f1c40f"
-    elif rsi_actual > 70:
-        estatus, color_s = "VENTA (Caro) 🚩", "#e74c3c"
+    # --- 4.5 Lógica de Señal Refinada ---
+    # Para Compra Fuerte, exigimos que el MACD esté cruzando al alza (Line > Signal)
+    if rsi_actual < 40 and precio_actual > ma50_actual and macd_line_actual > macd_signal_actual:
+        estatus, color_s = "COMPRA FUERTE (Tendencia Confirmada) 🚀", "#2ecc71"
+    elif rsi_actual < 30:
+        estatus, color_s = "COMPRA DE RIESGO (Sobrevendido) 🔥", "#f1c40f"
+    elif rsi_actual > 70 or (macd_line_actual < macd_signal_actual and precio_actual < ma50_actual):
+        estatus, color_s = "VENTA / PRECAUCIÓN 🚩", "#e74c3c"
     else:
         estatus, color_s = "MANTENER 👀", "#3498db"
 
@@ -240,73 +253,60 @@ if not datos.empty and len(datos) > 50:
         unsafe_allow_html=True
     )
 
-    col1, col2 = st.columns(2)
-    col3, col4 = st.columns(2)
-
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("Precio Actual", f"${precio_actual:,.2f}", 
                 f"{((precio_actual - precio_ayer)/precio_ayer)*100:.2f}%")
-    col2.metric("Predicción (Modelo Lineal)", f"${pred:,.2f}", 
-                f"{pred - precio_actual:.2f}")
-    col3.metric("Precisión Última Predicción", confianza)
-    col4.metric("RSI", f"{rsi_actual:.1f}")
+    col2.metric("RSI", f"{rsi_actual:.1f}")
+    col3.metric("Stop Loss Sugerido", f"${stop_loss_sugerido:,.2f}", 
+                f"-${precio_actual - stop_loss_sugerido:,.2f} (Riesgo)", delta_color="inverse")
+    col4.metric("Predicción Lineal", f"${pred:,.2f}", confianza)
 
+    # Gráfico avanzado con 4 paneles
     fig = make_subplots(
-        rows=3, cols=1, 
+        rows=4, cols=1, 
         shared_xaxes=True, 
         vertical_spacing=0.03, 
-        row_heights=[0.6, 0.15, 0.25]
+        row_heights=[0.5, 0.15, 0.15, 0.2]
     )
 
+    # Panel 1: Precio y Medias Móviles
     fig.add_trace(go.Candlestick(
         x=datos.index, open=datos['Open'], high=datos['High'],
         low=datos['Low'], close=datos['Close'], name='Precio'
     ), row=1, col=1)
 
-    fig.add_trace(go.Scatter(
-        x=datos.index, y=datos['MA20'], name='MA20', line=dict(width=1.5)
-    ), row=1, col=1)
+    fig.add_trace(go.Scatter(x=datos.index, y=datos['MA20'], name='MA20', line=dict(width=1.5)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=datos.index, y=datos['MA50'], name='MA50', line=dict(width=1.5)), row=1, col=1)
 
-    fig.add_trace(go.Scatter(
-        x=datos.index, y=datos['MA50'], name='MA50', line=dict(width=1.5)
-    ), row=1, col=1)
+    # Panel 2: Volumen
+    fig.add_trace(go.Bar(x=datos.index, y=datos['Volume'], marker_color=col_vol, name='Volumen'), row=2, col=1)
 
-    fig.add_trace(go.Bar(
-        x=datos.index, y=datos['Volume'], marker_color=col_vol, name='Volumen'
-    ), row=2, col=1)
-
-    fig.add_trace(go.Scatter(
-        x=datos.index, y=datos['RSI'], name='RSI', line=dict(width=1.5)
-    ), row=3, col=1)
-
+    # Panel 3: RSI
+    fig.add_trace(go.Scatter(x=datos.index, y=datos['RSI'], name='RSI', line=dict(width=1.5, color='purple')), row=3, col=1)
     fig.add_hline(y=70, line_dash="dot", line_color="red", row=3, col=1)
     fig.add_hline(y=30, line_dash="dot", line_color="green", row=3, col=1)
 
-    # Actualizamos el título del gráfico para reflejar el periodo seleccionado
+    # Panel 4: MACD
+    fig.add_trace(go.Scatter(x=datos.index, y=datos['MACD_Line'], name='MACD Line', line=dict(color='blue', width=1.5)), row=4, col=1)
+    fig.add_trace(go.Scatter(x=datos.index, y=datos['MACD_Signal'], name='Signal Line', line=dict(color='orange', width=1.5)), row=4, col=1)
+    fig.add_trace(go.Bar(x=datos.index, y=datos['MACD_Hist'], name='Histograma', marker_color=col_macd), row=4, col=1)
+
     fig.update_layout(
-        title=f"Gráfico de Precios - {seleccion_usuario}",
-        height=600,
+        title=f"Gráfico Avanzado - {seleccion_usuario}",
+        height=750,
         template="plotly_white",
         xaxis_rangeslider_visible=False,
-        margin=dict(l=10, r=10, t=40, b=10)
+        margin=dict(l=10, r=10, t=40, b=10),
+        showlegend=False
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-    st.download_button(
-        label="📥 Descargar datos a CSV",
-        data=datos.to_csv().encode('utf-8'),
-        file_name=f"analisis_{ticker}.csv",
-        mime="text/csv"
-    )
-
-    with st.expander("📖 Guía Educativa"):
+    with st.expander("📖 Guía Educativa Avanzada"):
         st.write("""
-        **Este modelo usa:**
-        * **Medias móviles (MA20 y MA50):** Para identificar la dirección general de la tendencia.
-        * **RSI (Relative Strength Index):** Para detectar niveles de sobrecompra (por encima de 70) y sobreventa (por debajo de 30).
-        * **Regresión lineal simple:** Como aproximación educativa de tendencia.
-        
-        **Importante:** La regresión lineal es solo una extrapolación matemática basada en el historial de precios. No predice eventos inesperados, noticias, ni cambios estructurales del mercado.
+        **Nuevos Indicadores Incorporados:**
+        * **MACD (Abajo):** Cuando la línea azul cruza por encima de la línea naranja, es una señal de que el impulso alcista está creciendo. El histograma muestra la distancia entre ambas.
+        * **ATR (Gestión de Riesgo):** Mide la volatilidad promedio de la acción. El sistema calcula tu **Stop Loss** restándole 1.5 veces el ATR al precio actual. Si el precio cae por debajo de ese nivel, matemáticamente la tendencia alcista se ha roto y deberías asumir la pérdida para proteger tu capital.
         """)
 else:
-    st.error(f"No se encontraron suficientes datos para **{ticker}** en el periodo de **{seleccion_usuario}**. Intenta seleccionar un rango de tiempo más amplio o verifica que el símbolo esté bien escrito.")
+    st.error(f"No se encontraron suficientes datos para **{ticker}** en el periodo de **{seleccion_usuario}**. Intenta seleccionar un rango de tiempo más amplio.")
