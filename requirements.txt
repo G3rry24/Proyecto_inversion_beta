@@ -1,7 +1,6 @@
-streamlit
-yfinance
-pandas
-mplfinance
-numpy
-scikit-learn
-plotly
+streamlit>=1.33.0
+yfinance>=0.2.40
+pandas>=2.0.0
+numpy>=1.26.0
+plotly>=5.20.0
+scikit-learn>=1.4.0
