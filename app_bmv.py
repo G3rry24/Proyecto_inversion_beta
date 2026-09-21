@@ -1170,9 +1170,9 @@ with tab_analisis:
                "ADX": "{:.1f}", "MACD_Line": "{:.4f}", "ATR": "{:.4f}"}
         styled = df_display.style.format({k: v for k, v in fmt.items() if k in df_display.columns})
         if "RSI" in df_display.columns:
-            styled = styled.applymap(_color_rsi, subset=["RSI"])
+            styled = styled.map(_color_rsi, subset=["RSI"])
         if "ADX" in df_display.columns:
-            styled = styled.applymap(_color_adx, subset=["ADX"])
+            styled = styled.map(_color_adx, subset=["ADX"])
         st.dataframe(styled, use_container_width=True)
 
     # ── Backtesting ────────────────────────────────────────────────────────
@@ -1400,7 +1400,7 @@ with tab_portafolio:
             if "LATERAL" in str(val):         return "background-color:#21262d; color:#888;"
             return ""
 
-        styled_s = df_senales.style.applymap(_color_senal, subset=["Señal"])
+        styled_s = df_senales.style.map(_color_senal, subset=["Señal"])
         st.dataframe(styled_s, use_container_width=True, hide_index=True)
 
         st.caption(
