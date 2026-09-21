@@ -390,10 +390,22 @@ def ejecutar_backtest_estrategia(df: pd.DataFrame) -> dict:
 
 
 def calcular_prediccion_lineal(precios: np.ndarray) -> float:
-    """Extrapola el siguiente punto con regresión lineal."""
-    X = np.arange(len(precios)).reshape(-1, 1)
-    modelo = LinearRegression().fit(X, precios.flatten())
-    return float(modelo.predict([[len(precios)]])[0])
+    """Extrapola el siguiente punto con regresión lineal.
+
+    Elimina NaN e infinitos antes de entrenar para evitar errores de validación
+    de sklearn cuando yfinance devuelve datos incompletos en algún ticker.
+    """
+    serie = precios.flatten()
+    mascara = np.isfinite(serie)
+    serie_limpia = serie[mascara]
+
+    if len(serie_limpia) < 2:
+        # No hay suficientes datos válidos para predecir
+        return float(serie_limpia[-1]) if len(serie_limpia) == 1 else float("nan")
+
+    X = np.arange(len(serie_limpia)).reshape(-1, 1)
+    modelo = LinearRegression().fit(X, serie_limpia)
+    return float(modelo.predict([[len(serie_limpia)]])[0])
 
 # ---------------------------------------------------------------------------
 # 7. CAPA DE PERSISTENCIA DE PREDICCIONES (session_state)
@@ -575,16 +587,29 @@ except Exception as e:
     st.error("Error al calcular indicadores. Intenta otro símbolo.")
     st.stop()
 
-precios = datos["Close"].values.flatten()
-precio_actual  = float(precios[-1])
-precio_ayer    = float(precios[-2])
-cambio_pct     = ((precio_actual - precio_ayer) / precio_ayer) * 100
+# Limpiar NaN del array de precios (algunos tickers tienen gaps en yfinance)
+precios_raw = datos["Close"].values.flatten()
+precios     = precios_raw[np.isfinite(precios_raw)]
 
-rsi_actual         = float(datos["RSI"].iloc[-1])
-ma50_actual        = float(datos["MA50"].iloc[-1])
-macd_line_actual   = float(datos["MACD_Line"].iloc[-1])
-macd_signal_actual = float(datos["MACD_Signal"].iloc[-1])
-atr_actual         = float(datos["ATR"].iloc[-1])
+if len(precios) < 2:
+    st.error(f"No hay suficientes precios válidos para **{ticker}**. Intenta otro rango.")
+    st.stop()
+
+precio_actual = float(precios[-1])
+precio_ayer   = float(precios[-2])
+cambio_pct    = ((precio_actual - precio_ayer) / precio_ayer) * 100 if precio_ayer != 0 else 0.0
+
+# Obtener últimos valores válidos (dropna para indicadores que empiezan con NaN)
+def _ultimo_valido(serie: pd.Series) -> float:
+    """Devuelve el último valor no-NaN de la serie, o 0.0 si todo es NaN."""
+    limpia = serie.dropna()
+    return float(limpia.iloc[-1]) if not limpia.empty else 0.0
+
+rsi_actual         = _ultimo_valido(datos["RSI"])
+ma50_actual        = _ultimo_valido(datos["MA50"])
+macd_line_actual   = _ultimo_valido(datos["MACD_Line"])
+macd_signal_actual = _ultimo_valido(datos["MACD_Signal"])
+atr_actual         = _ultimo_valido(datos["ATR"])
 
 stop_loss_sugerido = precio_actual - (1.5 * atr_actual)
 riesgo_absoluto    = precio_actual - stop_loss_sugerido
