@@ -47,38 +47,118 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-[data-testid="stAppViewContainer"] { background-color: #0e1117; color: #e0e0e0; }
+/* ── Fondo global ── */
+[data-testid="stAppViewContainer"] { background-color: #0e1117; }
+
+/* ── Texto general: blanco brillante ── */
+[data-testid="stAppViewContainer"],
+[data-testid="stAppViewContainer"] p,
+[data-testid="stAppViewContainer"] span,
+[data-testid="stAppViewContainer"] label,
+[data-testid="stAppViewContainer"] div {
+    color: #f0f6fc;
+}
+
+/* ── Títulos y subheaders ── */
+h1, h2, h3, h4 { color: #ffffff !important; }
+
+/* ── Métricas ── */
+[data-testid="metric-container"] {
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    padding: 14px;
+    border-radius: 10px;
+}
+[data-testid="stMetricLabel"]  { color: #c9d1d9 !important; font-size: 13px !important; font-weight: 600 !important; }
+[data-testid="stMetricValue"]  { color: #ffffff  !important; font-size: 22px !important; font-weight: 700 !important; }
+[data-testid="stMetricDelta"]  { color: #c9d1d9 !important; font-size: 13px !important; }
+
+/* ── Tabs ── */
+[data-testid="stTabs"] button[role="tab"] {
+    color: #8b949e !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+}
+[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    color: #ffffff !important;
+    border-bottom: 2px solid #388bfd !important;
+}
+
+/* ── Checkboxes y labels de controles ── */
+[data-testid="stCheckbox"] label,
+[data-testid="stCheckbox"] span,
+[data-testid="stSelectbox"] label,
+[data-testid="stTextInput"] label,
+[data-testid="stRadio"] label {
+    color: #e6edf3 !important;
+    font-weight: 500 !important;
+}
+
+/* ── Expanders ── */
+[data-testid="stExpander"] summary {
+    color: #e6edf3 !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
+}
+[data-testid="stExpander"] summary:hover { color: #ffffff !important; }
+
+/* ── Captions y texto pequeño ── */
+[data-testid="stCaptionContainer"],
+[data-testid="stCaptionContainer"] p { color: #8b949e !important; font-size: 12px !important; }
+
+/* ── Selectbox / text input (widget) ── */
+[data-testid="stSelectbox"] div[data-baseweb="select"] div,
+[data-testid="stTextInput"] input {
+    color: #e6edf3 !important;
+    background-color: #21262d !important;
+    border-color: #30363d !important;
+}
+
+/* ── Dataframe / tabla ── */
+[data-testid="stDataFrame"] { color: #e6edf3 !important; }
+
+/* ── Sidebar ── */
 [data-testid="stSidebar"] { background-color: #161b22; border-right: 1px solid #30363d; }
 [data-testid="stSidebar"] * { color: #c9d1d9 !important; }
+[data-testid="stSidebar"] label { color: #e6edf3 !important; font-weight: 500 !important; }
 [data-testid="stSidebar"] button {
     padding: 6px !important; font-size: 12px !important; border-radius: 8px !important;
     background-color: #21262d !important; border: 1px solid #30363d !important;
-    color: #c9d1d9 !important;
+    color: #e6edf3 !important;
 }
 [data-testid="stSidebar"] button:hover {
     background-color: #388bfd22 !important; border-color: #388bfd !important;
 }
-[data-testid="metric-container"] {
-    background-color: #161b22; border: 1px solid #30363d;
-    padding: 14px; border-radius: 10px;
-}
-[data-testid="stMetricValue"] { color: #e6edf3 !important; }
-[data-testid="stMetricDelta"] { font-size: 13px !important; }
+
+/* ── Alertas info / success / error ── */
+[data-testid="stAlert"] { color: #e6edf3 !important; }
+
+/* ── Spinner ── */
+[data-testid="stSpinner"] p { color: #c9d1d9 !important; }
+
+/* ── Signal Card ── */
 .signal-card {
     padding: 18px; border-radius: 12px; text-align: center;
-    color: white; font-weight: bold; margin-bottom: 20px;
+    color: #ffffff; font-weight: bold; margin-bottom: 20px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.4);
 }
+
+/* ── Disclaimer ── */
 .disclaimer-box {
     background-color: #2d2200; border-left: 4px solid #f9a825;
     padding: 10px 16px; border-radius: 6px;
     font-size: 13px; color: #ffe082; margin-bottom: 16px;
 }
-.badge-alcista  { background:#1a4a2e; color:#69f0ae; padding:3px 10px; border-radius:12px; font-size:12px; }
-.badge-bajista  { background:#4a1a1a; color:#ff8a80; padding:3px 10px; border-radius:12px; font-size:12px; }
-.badge-neutral  { background:#21262d; color:#c9d1d9; padding:3px 10px; border-radius:12px; font-size:12px; }
+
+/* ── Badges ── */
+.badge-alcista { background:#1a4a2e; color:#69f0ae; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:600; }
+.badge-bajista { background:#4a1a1a; color:#ff8a80; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:600; }
+.badge-neutral { background:#21262d; color:#c9d1d9; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:600; }
+
+/* ── Responsive ── */
 @media (max-width: 768px) {
     [data-testid="metric-container"] { padding: 8px !important; }
+    [data-testid="stMetricValue"] { font-size: 18px !important; }
     .signal-card h2 { font-size: 18px !important; }
 }
 </style>
